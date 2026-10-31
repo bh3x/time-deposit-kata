@@ -59,7 +59,7 @@ class TimeDepositSchemaTest {
     }
 
     @Test
-    void schemaIsCreatedByFlywayNotByHibernate() {
+    void schemaIsMigratedByFlywayOnPostgres18() {
         String database = jdbc.sql("select current_setting('server_version')").query(String.class).single();
         Boolean v1Succeeded = jdbc.sql("select success from flyway_schema_history where version = '1'")
                 .query(Boolean.class).optional().orElse(false);
@@ -86,9 +86,9 @@ class TimeDepositSchemaTest {
         @ParameterizedTest(name = "table \"{0}\"")
         @ValueSource(strings = {"timeDeposits", "withdrawals", "idempotencyKeys"})
         void tablesExistWithExactQuotedNames(String table) {
-            Integer exact = jdbc.sql("select count(*) from information_schema.tables where table_name = ?")
+            Integer exact = jdbc.sql("select count(*) from information_schema.tables where table_schema = current_schema() and table_name = ?")
                     .param(table).query(Integer.class).single();
-            Integer folded = jdbc.sql("select count(*) from information_schema.tables where table_name = ?")
+            Integer folded = jdbc.sql("select count(*) from information_schema.tables where table_schema = current_schema() and table_name = ?")
                     .param(table.toLowerCase()).query(Integer.class).single();
 
             assertThat(exact).isEqualTo(1);
@@ -118,7 +118,7 @@ class TimeDepositSchemaTest {
         void columnsHaveTheDecidedTypesAndNullability(String table, String column, String type, String nullable) {
             var actual = jdbc.sql("""
                             select data_type, is_nullable from information_schema.columns
-                            where table_name = ? and column_name = ?
+                            where table_schema = current_schema() and table_name = ? and column_name = ?
                             """)
                     .params(table, column)
                     .query((rs, n) -> rs.getString("data_type") + "/" + rs.getString("is_nullable"))
@@ -127,12 +127,40 @@ class TimeDepositSchemaTest {
             assertThat(actual).isEqualTo(type + "/" + nullable);
         }
 
+        @ParameterizedTest(name = "{0}.{1} has precision {2}, scale {3}")
+        @CsvSource({"timeDeposits, balance, 15, 2", "withdrawals, amount, 15, 2"})
+        void moneyColumnsHaveCentPrecisionBelowTenToTheThirteen(String table, String column, int precision,
+                                                                int scale) {
+            var actual = jdbc.sql("""
+                            select numeric_precision, numeric_scale from information_schema.columns
+                            where table_schema = current_schema() and table_name = ? and column_name = ?
+                            """)
+                    .params(table, column)
+                    .query((rs, n) -> rs.getInt("numeric_precision") + "," + rs.getInt("numeric_scale"))
+                    .single();
+
+            assertThat(actual).isEqualTo(precision + "," + scale);
+        }
+
+        @ParameterizedTest(name = "idempotencyKeys.{0} holds at most {1} characters")
+        @CsvSource({"idempotencyKey, 255", "status, 20"})
+        void textColumnsHaveTheirMaximumLength(String column, int maximumLength) {
+            Integer actual = jdbc.sql("""
+                            select character_maximum_length from information_schema.columns
+                            where table_schema = current_schema() and table_name = 'idempotencyKeys'
+                              and column_name = ?
+                            """)
+                    .param(column).query(Integer.class).single();
+
+            assertThat(actual).isEqualTo(maximumLength);
+        }
+
         @ParameterizedTest(name = "\"{0}\".id is GENERATED ALWAYS AS IDENTITY")
         @ValueSource(strings = {"timeDeposits", "withdrawals"})
         void idsAreAlwaysGenerated(String table) {
             String generation = jdbc.sql("""
                             select identity_generation from information_schema.columns
-                            where table_name = ? and column_name = 'id'
+                            where table_schema = current_schema() and table_name = ? and column_name = 'id'
                             """)
                     .param(table).query(String.class).single();
 
@@ -249,6 +277,23 @@ class TimeDepositSchemaTest {
         }
 
         @Test
+        void rejectsADuplicatePublicId() {
+            int deposit = rows.insertDeposit("basic", 31, "100.00");
+            UUID publicId = UUID.fromString("00000000-0000-4000-8000-000000000101");
+            insertWithdrawal(publicId, deposit);
+
+            assertRejected(() -> insertWithdrawal(publicId, deposit), UNIQUE_VIOLATION);
+        }
+
+        private void insertWithdrawal(UUID publicId, int deposit) {
+            jdbc.sql("""
+                            insert into "withdrawals" ("publicId", "timeDepositId", "amount", "date")
+                            values (?, ?, 10.00, '2026-01-01')
+                            """)
+                    .params(publicId, deposit).update();
+        }
+
+        @Test
         void rejectsAnUnknownTimeDeposit() {
             assertRejected(() -> rows.insertWithdrawal(-1, "10.00", "2026-01-01"), FOREIGN_KEY_VIOLATION);
         }
@@ -298,7 +343,8 @@ class TimeDepositSchemaTest {
                     .param(key).query(Integer.class).single()).isEqualTo(1);
         }
 
-        // The header allows 1–255 characters (ADR-0004); the column holds exactly that (storage half of P8).
+        // The column holds up to 255 characters (storage half of P8); the header's minimum of 1 character is validated
+        // by the REST adapter (ADR-0004, scenario P7).
         @ParameterizedTest(name = "key of length {0} accepted")
         @ValueSource(ints = {1, 255})
         void acceptsKeysOfTheAllowedLength(int length) {
