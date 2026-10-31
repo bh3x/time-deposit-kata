@@ -47,8 +47,8 @@ testing {
         register<JvmTestSuite>("integrationTest") {
             useJUnitJupiter()
             dependencies {
+                // The Boot platform comes with main's implementation configuration (extended below).
                 implementation(project())
-                implementation(platform(libs.spring.boot.dependencies))
                 implementation(libs.assertj.core)
                 implementation(libs.spring.boot.starter.data.jpa.test)
                 implementation(libs.spring.boot.testcontainers)
@@ -79,7 +79,9 @@ jacoco {
 }
 
 tasks.named<JacocoReport>("jacocoTestReport") {
-    dependsOn(tasks.named("test"))
+    // Both suites (ADR-0009): unit and architecture tests plus the Testcontainers integration tests.
+    dependsOn(tasks.named("test"), tasks.named("integrationTest"))
+    executionData(tasks.named("test").get(), tasks.named("integrationTest").get())
     reports {
         xml.required = true
         html.required = true
