@@ -12,6 +12,7 @@
 | `.claude/settings.local.json` | Personal overrides (gitignored) |
 | [`.claude/commands/`](.claude/commands/) | Workflow slash commands: `/step` (start an increment), `/review` (review the diff), `/ship` (push and open a PR) |
 | [`.claude/agents/code-reviewer.md`](.claude/agents/code-reviewer.md) | Read-only reviewer subagent that checks changes against `CLAUDE.md` |
+| [`.claude/agents/test-designer.md`](.claude/agents/test-designer.md) | Read-only subagent that derives test cases from the requirements before implementation (ADR-0009) |
 
 ## How to reproduce
 1. Install [Claude Code](https://docs.claude.com/en/docs/claude-code) (CLI or VS Code extension).

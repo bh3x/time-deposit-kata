@@ -22,10 +22,12 @@ An ADR captures one significant decision: its context, the options considered, t
 | [0006](0006-data-model.md) | Data model | Accepted | 2026-10-31 |
 | [0007](0007-technology-stack-and-build.md) | Technology stack and build | Accepted | 2026-10-31 |
 | [0008](0008-hexagonal-architecture.md) | Hexagonal architecture | Accepted | 2026-10-31 |
+| [0009](0009-testing-strategy.md) | Testing strategy | Accepted | 2026-10-31 |
 
 ## Planned decisions
 Numbers are assigned when each ADR is written.
 - Interest calculation design
 - Balance update consistency (concurrent runs and writers, idempotency reservation and flow, in-flight `409` and
   stale keys, key check vs lock order, 24-hour cleanup, single-deposit failures such as overflow, scale — see
-  ADR-0008); must be accepted before `POST /balance-updates` is implemented
+  ADR-0008); must be accepted before `POST /balance-updates` is implemented; completes the pending scenarios in
+  `docs/testing.md` (P9–P12, S6)
