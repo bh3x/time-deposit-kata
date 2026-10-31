@@ -19,7 +19,9 @@
 
 ## Workflow
 - Plan first, then implement in small increments — one branch and pull request per increment.
-- Every change is proposed, reviewed and explicitly approved before it is written or committed.
+- Every step is planned and approved before work starts; commits, pushes and PRs are approved individually.
+- Decisions are made through structured options with a recommendation; design is recorded in ADRs before
+  implementation; each increment is reviewed by a read-only reviewer subagent.
 - Characterization tests pin the legacy behaviour before any refactoring.
 - AI-assisted commits carry the trailer `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`.
 
