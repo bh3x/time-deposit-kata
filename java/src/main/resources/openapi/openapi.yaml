@@ -69,7 +69,9 @@ components:
           example: 120
         withdrawals:
           type: array
-          description: Withdrawals of this time deposit; empty if none.
+          description: >
+            History of withdrawals from this time deposit; empty if none.
+            The balance is already net of these withdrawals.
           items:
             $ref: '#/components/schemas/Withdrawal'
     Withdrawal:

@@ -33,6 +33,8 @@ with currency.
   no binary floating point on the wire. **Single currency** assumed — the brief defines none.
 - **planType:** string with `x-extensible-enum` (`basic`, `student`, `premium`); case-sensitive.
 - `days` is a non-negative integer.
+- **Balance and withdrawals:** `balance` is the current balance, already net of past withdrawals; withdrawals are
+  a history record. Assumption — the brief does not relate them, and the interest calculation ignores withdrawals.
 
 ### Endpoint: list time deposits
 - `GET /time-deposits` (relative to `/api/v1`), operationId `listTimeDeposits`, tag `TimeDeposits`
@@ -59,6 +61,15 @@ The brief allows exactly two endpoints, so the following is recorded for later o
   `500` Problem Details.
 - Fits the current design without changes: the `TimeDeposit` schema is reused, and random UUIDs make
   item URLs non-enumerable.
+
+### Open question: how withdrawals are created
+The brief stores and returns withdrawals but defines no way to create them. Candidate channels, undecided:
+- **Synchronous API** (customer/teller action) — needs validation, authentication and idempotency.
+- **Asynchronous event** from another system (e.g. core banking) — message consumer, duplicate handling.
+- **Scheduled/batch import** — interacts with the timing of balance updates.
+
+The read representation is the same in every case. For this exercise, sample withdrawals are seeded
+(see the data model ADR).
 
 ## Consequences
 - The data model needs a unique public UUID per time deposit and withdrawal (data model ADR).
