@@ -25,8 +25,11 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 @DataJpaTest
 @ActiveProfiles("demo")
-@Import(PostgresContainerConfiguration.class)
+@Import({PostgresContainerConfiguration.class, TimeDepositPersistenceAdapter.class})
 class DemoSeedTest {
+
+    @Autowired
+    private TimeDepositPersistenceAdapter adapter;
 
     @Autowired
     private DataSource dataSource;
@@ -85,6 +88,11 @@ class DemoSeedTest {
 
         assertThat(succeeded).isTrue();
         assertThat(new ClassPathResource("db/migration/R__demo_seed.sql").exists()).isFalse();
+    }
+
+    @Test
+    void canBeListedCompletelyThroughTheAdapter() {
+        assertThat(adapter.loadAll()).hasSize(count("timeDeposits"));
     }
 
     // Repeatable migrations re-run when their checksum changes, so the seed must not duplicate rows.
