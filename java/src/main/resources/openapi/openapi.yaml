@@ -50,6 +50,7 @@ paths:
       description: >
         Applies one round of the monthly interest rules to every time deposit and stores the new balances.
         Not idempotent: each call applies interest again, unless the same Idempotency-Key is reused.
+        Runs are serialised: concurrent requests are processed one after another, never in parallel.
       parameters:
         - name: Idempotency-Key
           in: header
@@ -143,8 +144,8 @@ components:
           format: int32
           minimum: 0
           description: >
-            Number of days since the time deposit was opened; drives the interest rules.
-            Assumption: the brief does not define this field.
+            Age of the time deposit in days, as stored; drives the interest rules. Not advanced by this API
+            (balance updates do not change it). Assumption: the brief does not define this field.
           example: 120
         withdrawals:
           type: array

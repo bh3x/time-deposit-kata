@@ -29,8 +29,9 @@ objects only, no URI versioning; Google AIP and Microsoft: wrapped collections a
 ## Consequences
 - Mostly Spring Boot / Jackson defaults and no extra libraries. Implementation follow-ups:
   - omit absent fields: `spring.jackson.default-property-inclusion=non_null`;
-  - Problem Details responses: `spring.mvc.problemdetails.enabled=true` (or a `@RestControllerAdvice`
-    returning `ProblemDetail`), otherwise Spring falls back to its default error JSON;
+  - Problem Details responses: `spring.mvc.problemdetails.enabled=true` (covers Spring MVC's own exceptions)
+    **and** a `@RestControllerAdvice` mapping any other exception to a `500` `ProblemDetail`; otherwise
+    unexpected errors fall back to Spring Boot's default error JSON;
   - date-times serialised from `Instant` (or `OffsetDateTime` at UTC);
   - money as decimal strings needs an explicit mapping (see ADR-0004).
 - No room for collection metadata (e.g. paging) without a breaking change; acceptable, as none is required.

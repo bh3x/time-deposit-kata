@@ -33,10 +33,13 @@ with currency.
   no binary floating point on the wire. **Single currency** assumed — the brief defines none. Amounts are
   **non-negative** (a balance or withdrawal is never below zero). Conversion from the legacy `Double`:
   `BigDecimal.valueOf(d).setScale(2, RoundingMode.HALF_UP)` — the rounding mode the legacy calculator uses for
-  interest — applied when persisting and when producing the representation.
+  interest — applied when producing the representation. How balances are stored (column scale) is decided in
+  the planned *Data model* ADR.
 - **planType:** string with `x-extensible-enum` (`basic`, `student`, `premium`); case-sensitive. The known values
   are also listed in the description, as Swagger UI does not display the extension.
-- `days` is a non-negative integer.
+- **days:** non-negative integer — the age of the time deposit in days **as stored**; this API never advances it
+  (balance updates do not change it). Assumption: the brief does not define `days`; keeping it unchanged
+  preserves the legacy `updateBalance` behaviour.
 - **Balance and withdrawals:** `balance` is the current balance, already net of past withdrawals; withdrawals are
   a history record. Assumption — the brief does not relate them, and the interest calculation ignores withdrawals.
 
@@ -62,6 +65,9 @@ incremented, withdrawals are not involved).
   `TimeDeposits`. Top-level rather than `/time-deposits/balance-updates`: the run is not contained in the time
   deposits (it acts on them), and nesting would collide with a future `/time-deposits/{id}`.
 - **Synchronous:** the response is returned after all balances are stored.
+- **Serialised runs:** balance update runs never overlap. Two concurrent runs would read the same balances and one
+  run's interest would be lost, breaking "each call applies interest again". The locking mechanism is decided in
+  the planned *Hexagonal architecture* ADR.
 - **Response:** `200 OK` with a `BalanceUpdate` summary: `processedCount` (all deposits processed, including those
   whose balance did not change) and `executedAt` (UTC). Not `201 Created`: runs are not retrievable, so there is
   no `Location` to point to.
