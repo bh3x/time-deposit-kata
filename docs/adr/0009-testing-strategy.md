@@ -1,6 +1,6 @@
 # ADR-0009: Testing strategy
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-10-31
 
 ## Context
