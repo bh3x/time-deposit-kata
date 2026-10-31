@@ -13,9 +13,13 @@ Check:
 - Branch name follows the convention; the ADR status flip (if any) is the last commit of the PR
 - After `openapi.yaml` changes, the redocly lint was run and its result is stated in the PR description or
   commit message
-- Tests at the right level (unit / IT / web), boundary cases on both sides of each rule
+- Tests at the right level (unit in `src/test`, integration in `src/integrationTest`, web), boundary cases on both
+  sides of each rule
 - `TimeDeposit` and `TimeDepositCalculator.updateBalance` signature/behaviour unchanged
-- Hexagonal boundaries: no Spring/JPA in `domain`; adapters depend inward only
+- Hexagonal boundaries per ADR-0008: dependencies point inward (adapter → application → domain); capabilities
+  talk only via `port.in`; no framework in `domain` or the legacy classes; only Spring stereotype and transaction
+  annotations in `application`; JPA types only in `adapter/out/persistence`; generated OpenAPI types only in
+  `adapter/in/rest`
 - Exactly two REST endpoints, matching `openapi.yaml` once the contract exists
 - Other language folders (`c#/`, `kotlin/`, `python/`, `typescript/`) unchanged
 - Tests added/updated; characterization tests untouched unless justified
