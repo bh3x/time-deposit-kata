@@ -27,7 +27,8 @@ OpenAPI (`openapi.yaml` + openapi-generator), JUnit 5 + AssertJ, ArchUnit, Testc
 
 ## Hard constraints
 - `org.ikigaidigital.TimeDeposit`: no breaking changes (package, constructor, getters, `setBalance`).
-- `TimeDepositCalculator.updateBalance(List<TimeDeposit>)`: signature unchanged and behaviour identical, including:
+- `org.ikigaidigital.TimeDepositCalculator.updateBalance(List<TimeDeposit>)`: class name, package and signature
+  unchanged, behaviour identical, including:
   - no interest when `days <= 30`
   - basic 1%, student 3% (only while `days < 366`), premium 5% (only when `days > 45`), unknown plan 0%
   - plan types are matched as exact, case-sensitive lowercase strings: `basic`, `student`, `premium`
@@ -43,9 +44,9 @@ OpenAPI (`openapi.yaml` + openapi-generator), JUnit 5 + AssertJ, ArchUnit, Testc
 Defined in ADR-0008 (the source of truth; any deviation needs a new ADR). Summary:
 - **Capability first, hexagon inside:** `org.ikigaidigital.<capability>/{domain, application, adapter}`; today
   `timedeposit`. A capability is a business area with its own use cases and data, not a package per endpoint.
-- **Root package:** only the legacy `TimeDeposit` (shared domain kernel, unchanged) and the Spring Boot main class
-  `TimeDepositApplication`. `TimeDepositCalculator` moves to `timedeposit/domain` after the characterization tests
-  exist (`updateBalance` signature and behaviour unchanged).
+- **Root package:** only the legacy `TimeDeposit` (shared domain kernel) and `TimeDepositCalculator` (belongs to
+  `timedeposit`, stays for compatibility and later delegates to `timedeposit/domain/interest`), plus the Spring
+  Boot main class `TimeDepositApplication`.
 - `application/port/in` (driving side, `…UseCase`) and `application/port/out` (driven side, `…Port`), named by
   purpose; services in `application/service` carry `@UseCase` (a `@Service` stereotype) and `@Transactional`.
 - `adapter/in/rest` implements the generated OpenAPI interface (one tag per capability); `adapter/out/persistence`
@@ -55,7 +56,8 @@ Defined in ADR-0008 (the source of truth; any deviation needs a new ADR). Summar
   `@Configuration` classes (e.g. the `TimeDepositCalculator` bean).
 - **Rules (ArchUnit):** dependencies point inward (adapter → application → domain); capabilities talk only via
   `port.in`; the domain and legacy classes use no framework; the application layer may use only Spring
-  stereotype and transaction annotations.
+  stereotype and transaction annotations; JPA only in `adapter/out/persistence`; generated OpenAPI types only in
+  `adapter/in/rest` (full list: ADR-0008 Rules).
 
 ## Code style
 - SOLID, small classes, constructor injection, no field injection.

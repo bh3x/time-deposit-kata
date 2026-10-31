@@ -28,4 +28,4 @@ Numbers are assigned when each ADR is written.
 - Interest calculation design
 - Balance update consistency (concurrent runs and writers, idempotency reservation and flow, in-flight `409` and
   stale keys, key check vs lock order, 24-hour cleanup, single-deposit failures such as overflow, scale — see
-  ADR-0008)
+  ADR-0008); must be accepted before `POST /balance-updates` is implemented

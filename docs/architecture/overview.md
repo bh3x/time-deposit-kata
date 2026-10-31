@@ -44,10 +44,13 @@ flowchart LR
       out3["RecordBalanceUpdatePort"]
     end
     subgraph domain["timedeposit/domain"]
-      calc["TimeDepositCalculator<br/>(moved; updateBalance unchanged)"]
       terms["TimeDepositTerms · ReadOnlyTimeDeposit"]
+      policies["interest/ (interest ADR)"]
     end
-    kernel["TimeDeposit<br/>(root package, shared kernel, unchanged)"]
+    subgraph root["root package (legacy, unchanged)"]
+      calc["TimeDepositCalculator<br/>(belongs to timedeposit)"]
+      kernel["TimeDeposit<br/>(shared kernel)"]
+    end
   end
   subgraph persistence["adapter/out/persistence (driven)"]
     jpa["JPA entities · repositories · adapters"]
@@ -61,6 +64,7 @@ flowchart LR
   svc1 --> terms
   ctrl --> terms
   calc --> kernel
+  calc -. "after refactoring" .-> policies
 ```
 - **Dependencies point inward:** adapters depend on ports; the application depends on the domain; the domain has
   no framework dependencies. ArchUnit enforces the rules of ADR-0008.
@@ -113,7 +117,7 @@ overflow, and behaviour at scale.
 - **Money:** stored as `NUMERIC(15,2)` (ADR-0006); the legacy domain computes in `Double`; the persistence adapter
   reads with `BigDecimal.doubleValue()` and writes with `BigDecimal.valueOf(..).setScale(2, HALF_UP)`; the API
   shows decimal strings with two fraction digits (ADR-0004).
-- **Identifiers:** the API `id` is the `publicId` UUID; internal integer keys never leave the persistence adapter
+- **Identifiers:** the API `id` is the `publicId` UUID; internal integer keys never reach the API
   (ADR-0004, ADR-0006).
 - **Persistence mapping:** JPA entities exist only in the persistence adapter and are mapped two-way to
   `TimeDeposit`; identifiers are quoted camelCase as in the brief (ADR-0006, ADR-0008).
