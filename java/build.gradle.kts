@@ -59,6 +59,10 @@ tasks.named("check") {
 }
 
 // Coverage report only, no threshold: evidence that the characterization tests reach every branch.
+jacoco {
+    toolVersion = libs.versions.jacoco.get()
+}
+
 tasks.named<JacocoReport>("jacocoTestReport") {
     dependsOn(tasks.named("test"))
     reports {
