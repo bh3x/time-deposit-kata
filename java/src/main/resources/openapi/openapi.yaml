@@ -32,6 +32,44 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/Problem'
+  /balance-updates:
+    post:
+      operationId: createBalanceUpdate
+      tags: [TimeDeposits]
+      summary: Apply monthly interest to all time deposits
+      description: >
+        Applies one round of the monthly interest rules to every time deposit and stores the new balances.
+        Not idempotent: each call applies interest again, unless the same Idempotency-Key is reused.
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: false
+          description: >
+            Client-generated unique key. A repeated request with the same key returns the original
+            outcome without applying interest again.
+          schema:
+            type: string
+            maxLength: 255
+          example: 6c5f1d2e-4a8b-4c3d-9e7f-1a2b3c4d5e6f
+      responses:
+        '200':
+          description: Balances updated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BalanceUpdate'
+        '400':
+          description: Malformed Idempotency-Key.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '500':
+          description: Unexpected server error.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
 components:
   schemas:
     TimeDeposits:
@@ -92,6 +130,22 @@ components:
           type: string
           format: date
           example: '2026-09-15'
+    BalanceUpdate:
+      type: object
+      description: Outcome of one balance update run (monthly interest applied to all time deposits).
+      required: [updatedCount, executedAt]
+      properties:
+        updatedCount:
+          type: integer
+          format: int32
+          minimum: 0
+          description: Number of time deposits processed.
+          example: 5
+        executedAt:
+          type: string
+          format: date-time
+          description: When the update was executed (UTC).
+          example: '2026-10-31T10:15:00Z'
     Amount:
       type: string
       pattern: '^-?\d+\.\d{2}$'

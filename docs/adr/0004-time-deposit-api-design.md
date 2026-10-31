@@ -47,7 +47,22 @@ with currency.
   authentication later is a deliberate contract change.
 
 ### Balance Update
-_To be designed._
+The brief's "update the balances of all time deposits in the database" is read as: a client-triggered operation
+that applies one round of the existing monthly interest rules (`TimeDepositCalculator.updateBalance`) to every
+stored time deposit and saves the resulting balances. No input; no other attribute changes (`days` is not
+incremented, withdrawals are not involved).
+
+- **Modelled as a process resource** (a balance update run), not as a state change of the collection: it is an
+  action with an outcome and is not idempotent.
+- **Endpoint:** `POST /balance-updates` (relative to `/api/v1`), operationId `createBalanceUpdate`, tag
+  `TimeDeposits`. Top-level rather than `/time-deposits/balance-updates`: the run is not contained in the time
+  deposits (it acts on them), and nesting would collide with a future `/time-deposits/{id}`.
+- **Synchronous:** the response is returned after all balances are stored.
+- **Response:** `200 OK` with a `BalanceUpdate` summary (`updatedCount`, `executedAt`). Not `201 Created`: runs
+  are not retrievable, so there is no `Location` to point to.
+- **Idempotency:** optional `Idempotency-Key` header. A repeated request with the same key returns the original
+  outcome without applying interest again; without a key, each call applies interest again (documented).
+  `400` Problem Details for a malformed key; `500` for unexpected errors.
 
 ## Future extensions (not part of this contract)
 The brief allows exactly two endpoints, so the following is recorded for later only — not specified in
@@ -76,3 +91,5 @@ The read representation is the same in every case. For this exercise, sample wit
 - The REST adapter converts the legacy `Double` balance to a 2-decimal string; the domain is unchanged.
 - Adding a currency later is a deliberate, versioned change.
 - Tests must not rely on collection order.
+- Idempotency keys and their outcomes must be stored (data model ADR); key check and balance update run in one
+  transaction (architecture ADR).
