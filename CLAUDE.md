@@ -62,8 +62,8 @@ Defined in ADR-0008 (the source of truth; any deviation needs a new ADR). Summar
 ## Code style
 - SOLID, small classes, constructor injection, no field injection.
 - Prefer clear, explicit code over clever Spring "magic".
-- Tests: JUnit 5 + AssertJ; unit and architecture tests in `src/test`; integration tests (Testcontainers) in the
-  separate `src/integrationTest` suite (ADR-0007).
+- Tests: JUnit + AssertJ per ADR-0009 (guide: `docs/testing.md`); unit, web slice and architecture tests in
+  `src/test`; tests needing Docker (Testcontainers) in the separate `src/integrationTest` suite (ADR-0007).
 
 ## Working rules
 
@@ -118,7 +118,7 @@ Defined in ADR-0008 (the source of truth; any deviation needs a new ADR). Summar
     the code is wrong, not the test. Never weaken, skip or delete a test to get to green — ask instead.
 14. Pick the right level: domain rules → unit tests; persistence → Testcontainers ITs; contract and wiring →
     web/IT tests; architecture → ArchUnit (ADR-0008). Don't test the same rule twice at a higher level
-    without a reason.
+    without a reason. The full testing strategy is ADR-0009; how-to and acceptance scenarios: `docs/testing.md`.
 
 ### Depth and completeness (design)
 15. Don't stop at the first design that works. For every structural decision (interest policies, ports, read

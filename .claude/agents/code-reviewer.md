@@ -13,8 +13,10 @@ Check:
 - Branch name follows the convention; the ADR status flip (if any) is the last commit of the PR
 - After `openapi.yaml` changes, the redocly lint was run and its result is stated in the PR description or
   commit message
-- Tests at the right level (unit in `src/test`, integration in `src/integrationTest`, web), boundary cases on both
-  sides of each rule
+- Tests per ADR-0009: right level and suite (Docker → `src/integrationTest`), fakes for `port.out` and
+  `@MockitoBean` only for use cases in web slices, each rule tested once at the lowest level, naming
+  (`<Subject>Test`, `<UseCase>EndToEndTest`), fixed `Clock`/seeds, no `Thread.sleep`; boundary cases on both sides
+  of each rule; the affected acceptance scenarios in `docs/testing.md` are covered
 - `TimeDeposit` and `TimeDepositCalculator.updateBalance` signature/behaviour unchanged
 - Hexagonal boundaries per ADR-0008: dependencies point inward (adapter → application → domain); capabilities
   talk only via `port.in`; no framework in `domain` or the legacy classes; only Spring stereotype and transaction
