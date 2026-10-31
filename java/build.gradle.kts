@@ -16,6 +16,8 @@ dependencies {
     // Spring Boot's dependency management as a platform (BOM), without the Boot plugin: the plugin's bootJar task
     // needs a main class, which arrives with the first adapter step (ADR-0007, ADR-0008).
     implementation(platform(libs.spring.boot.dependencies))
+    // Stereotype annotations for @UseCase (ADR-0008); the application layer may use nothing else from Spring.
+    implementation(libs.spring.context)
 }
 
 tasks.withType<JavaCompile>().configureEach {
