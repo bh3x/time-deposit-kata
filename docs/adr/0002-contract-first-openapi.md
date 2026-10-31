@@ -26,6 +26,8 @@ documented, triggerable via Swagger, and stable while the implementation is refa
 ## Consequences
 - API changes start in `openapi.yaml` and are reviewed before code changes.
 - Controllers implement generated interfaces; a mismatch with the contract fails the build.
-- Requires the generator plugin in the Maven build (tooling step).
+- Requires the generator plugin in the Maven build (tooling step). Generated models use the suffix `Dto`
+  (e.g. `TimeDepositDto`) so they never clash with domain classes such as the legacy `TimeDeposit`; schema names
+  in the contract stay suffix-free.
 - The contract is validated with Redocly CLI (recommended ruleset). The `info-license` warning is accepted:
   no license is declared for this exercise.

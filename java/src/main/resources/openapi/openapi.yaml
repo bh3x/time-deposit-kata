@@ -19,6 +19,7 @@ components:
         $ref: '#/components/schemas/TimeDeposit'
     TimeDeposit:
       type: object
+      description: A time deposit with its current balance and withdrawals.
       required: [id, planType, balance, days, withdrawals]
       properties:
         id:
@@ -32,12 +33,16 @@ components:
           x-extensible-enum: [basic, student, premium]
           example: premium
         balance:
-          $ref: '#/components/schemas/Amount'
+          description: Current balance, including all interest applied so far.
+          allOf:
+            - $ref: '#/components/schemas/Amount'
         days:
           type: integer
           format: int32
           minimum: 0
-          description: Age of the time deposit in days.
+          description: >
+            Number of days since the time deposit was opened; drives the interest rules.
+            Assumption: the brief does not define this field.
           example: 120
         withdrawals:
           type: array
@@ -46,6 +51,7 @@ components:
             $ref: '#/components/schemas/Withdrawal'
     Withdrawal:
       type: object
+      description: A withdrawal from a time deposit.
       required: [id, amount, date]
       properties:
         id:
@@ -54,7 +60,9 @@ components:
           description: Public identifier (random UUID v4). Not the internal database key.
           example: 9b1d4c7a-2e3f-4a5b-8c6d-0e1f2a3b4c5d
         amount:
-          $ref: '#/components/schemas/Amount'
+          description: Amount withdrawn.
+          allOf:
+            - $ref: '#/components/schemas/Amount'
         date:
           type: string
           format: date
