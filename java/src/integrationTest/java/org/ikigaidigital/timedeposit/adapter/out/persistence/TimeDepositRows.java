@@ -36,6 +36,15 @@ final class TimeDepositRows {
                 .query(Integer.class).single();
     }
 
+    int insertWithdrawal(UUID publicId, int timeDepositId, String amount, String date) {
+        return jdbc.sql("""
+                        insert into "withdrawals" ("publicId", "timeDepositId", "amount", "date")
+                        values (?, ?, ?, ?) returning "id"
+                        """)
+                .params(publicId, timeDepositId, new BigDecimal(amount), LocalDate.parse(date))
+                .query(Integer.class).single();
+    }
+
     int insertWithdrawal(int timeDepositId, String amount, String date) {
         return jdbc.sql("""
                         insert into "withdrawals" ("timeDepositId", "amount", "date")

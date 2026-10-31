@@ -5,6 +5,7 @@ import com.tngtech.archunit.core.importer.ImportOption;
 import com.tngtech.archunit.junit.AnalyzeClasses;
 import com.tngtech.archunit.junit.ArchTest;
 import com.tngtech.archunit.lang.ArchRule;
+import jakarta.persistence.Entity;
 import org.ikigaidigital.TimeDeposit;
 import org.ikigaidigital.TimeDepositCalculator;
 import org.ikigaidigital.shared.application.UseCase;
@@ -111,6 +112,40 @@ class TimeDepositCapabilityArchitectureTest {
     static final ArchRule useCaseIsAServiceStereotype = classes()
             .that().belongToAnyOf(UseCase.class)
             .should().beAnnotatedWith(Service.class);
+
+    // Rule 5: JPA, Spring Data and Hibernate appear only in persistence adapters, and so do JPA entities.
+    @ArchTest
+    static final ArchRule jpaOnlyInPersistenceAdapters = noClasses()
+            .that().resideOutsideOfPackage("..adapter.out.persistence..")
+            .should().dependOnClassesThat()
+            .resideInAnyPackage("jakarta.persistence..", "org.springframework.data..", "org.hibernate..");
+
+    // Implied by the rule above (annotations are dependencies); kept for its clearer failure message.
+    @ArchTest
+    static final ArchRule entitiesOnlyInPersistenceAdapters = classes()
+            .that().areAnnotatedWith(Entity.class)
+            .should().resideInAPackage("..adapter.out.persistence..");
+
+    // Rule 1, stricter for the persistence adapter: within the project it uses only driven ports, the read model, the
+    // domain, the kernel and shared technical code — never use cases, services or other adapters (shared.adapter.in
+    // is excluded by the rule below).
+    @ArchTest
+    static final ArchRule persistenceAdapterUsesOnlyPortsModelsAndDomain = classes()
+            .that().resideInAPackage("org.ikigaidigital.timedeposit.adapter.out.persistence..")
+            .should().onlyDependOnClassesThat(
+                    not(resideInAPackage("org.ikigaidigital.."))
+                            .or(resideInAnyPackage(
+                                    "org.ikigaidigital.timedeposit.adapter.out.persistence..",
+                                    "org.ikigaidigital.timedeposit.application.port.out..",
+                                    "org.ikigaidigital.timedeposit.application.model..",
+                                    "org.ikigaidigital.timedeposit.domain..",
+                                    "org.ikigaidigital.shared.."))
+                            .or(belongToAnyOf(TimeDeposit.class, TimeDepositCalculator.class)));
+
+    @ArchTest
+    static final ArchRule drivenAdaptersDoNotDependOnDrivingAdapters = noClasses()
+            .that().resideInAPackage("..adapter.out..")
+            .should().dependOnClassesThat().resideInAPackage("..adapter.in..");
 
     // Decision 4 (G6 groundwork): the read model never exposes the mutable legacy object or an internal key.
     @ArchTest
