@@ -5,8 +5,11 @@ import java.math.RoundingMode;
 import java.util.List;
 
 public class TimeDepositCalculator {
+    // Applies to every plan, as in the legacy code; whether a future plan may define its own grace period ("for any
+    // existing plans") is left to the planned interest calculation design.
     private static final int GRACE_PERIOD_DAYS = 30;
-    // "No interest after 1 year": the legacy rule is days < 366, so day 365 still earns interest.
+    // "No interest after 1 year": the legacy rule is days < 366, so day 365 still earns interest. Other readings
+    // (days <= 365, a calendar year, twelve monthly applications) are not used: behaviour must stay identical.
     private static final int STUDENT_MAX_DAYS_EXCLUSIVE = 366;
     private static final int PREMIUM_MIN_DAYS_EXCLUSIVE = 45;
     private static final double BASIC_ANNUAL_RATE = 0.01;
@@ -22,20 +25,21 @@ public class TimeDepositCalculator {
     }
 
     // One month of interest for the deposit's plan. The plan type is read only after the grace period, and matched
-    // exactly and case-sensitively; unknown plans earn nothing.
+    // exactly and case-sensitively; unknown plans earn nothing. A null plan type throws NullPointerException here,
+    // as the legacy equals chain did (pinned in the characterization tests) — do not add a "case null".
     private static double monthlyInterest(TimeDeposit deposit) {
         if (deposit.getDays() <= GRACE_PERIOD_DAYS) {
-            return 0;
+            return 0.0;
         }
         return switch (deposit.getPlanType()) {
             case "student" -> deposit.getDays() < STUDENT_MAX_DAYS_EXCLUSIVE
                     ? deposit.getBalance() * STUDENT_ANNUAL_RATE / MONTHS_PER_YEAR
-                    : 0;
+                    : 0.0;
             case "premium" -> deposit.getDays() > PREMIUM_MIN_DAYS_EXCLUSIVE
                     ? deposit.getBalance() * PREMIUM_ANNUAL_RATE / MONTHS_PER_YEAR
-                    : 0;
+                    : 0.0;
             case "basic" -> deposit.getBalance() * BASIC_ANNUAL_RATE / MONTHS_PER_YEAR;
-            default -> 0;
+            default -> 0.0;
         };
     }
 
