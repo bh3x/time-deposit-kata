@@ -1,6 +1,6 @@
 # ADR-0007: Technology stack and build
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-10-31
 
 ## Context
