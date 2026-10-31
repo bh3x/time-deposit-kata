@@ -14,10 +14,10 @@ An ADR captures one significant decision: its context, the options considered, t
 | ADR | Title | Status | Date |
 |---|---|---|---|
 | [0001](0001-record-architecture-decisions.md) | Record architecture decisions | Accepted | 2026-10-31 |
+| [0002](0002-contract-first-openapi.md) | Contract-first OpenAPI approach | Proposed | 2026-10-31 |
 
 ## Planned decisions
 Numbers are assigned when each ADR is written.
-- Contract-first OpenAPI approach
 - Time deposit API design
 - Data model
 - Hexagonal architecture

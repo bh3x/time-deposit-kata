@@ -1,0 +1,13 @@
+openapi: 3.0.3
+info:
+  title: XA Bank Time Deposit API
+  version: 1.0.0
+  description: >
+    Contract-first API for XA Bank time deposits.
+    Endpoints are defined in a later increment (see docs/adr).
+servers:
+  - url: /api/v1
+    description: Relative to the host serving the API
+paths: {}
+components:
+  schemas: {}
