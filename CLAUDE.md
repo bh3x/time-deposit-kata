@@ -23,7 +23,7 @@ The solution is implemented in **Java** inside `java/`. The other language folde
 ## Target stack
 Decided in ADR-0007: Java 25 (Gradle toolchain), Spring Boot 4.1, Gradle 9.x with Kotlin DSL and wrapper
 (`./gradlew`), version catalog `gradle/libs.versions.toml`, Spring Data JPA, PostgreSQL, Flyway, contract-first
-OpenAPI (`openapi.yaml` + openapi-generator), JUnit 5 + AssertJ, ArchUnit, Testcontainers, Docker Compose.
+OpenAPI (`openapi.yaml` + openapi-generator), JUnit + AssertJ, ArchUnit, Testcontainers, Docker Compose.
 
 ## Hard constraints
 - `org.ikigaidigital.TimeDeposit`: no breaking changes (package, constructor, getters, `setBalance`).

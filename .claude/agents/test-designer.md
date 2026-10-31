@@ -11,7 +11,9 @@ Derive test cases from the **requirements, not from an implementation** (CLAUDE.
 - the acceptance scenarios in `docs/testing.md` (G…, P…, R…) and the contract
   `java/src/main/resources/openapi/openapi.yaml`.
 You may read existing code only for public types and signatures the increment builds on (ports, DTO names). Do not
-read or reuse the implementation of the code being changed, and never derive an expected value from code.
+read or reuse the implementation of the code being changed, and never derive an expected value from code — except
+for characterization tests, whose expected values are by definition the legacy behaviour (frozen copy, rule 11).
+This restriction is an instruction, not a tool limit: keep to it.
 
 For each test case give:
 - an id and the scenario it covers (scenario id from `docs/testing.md` where one exists);
