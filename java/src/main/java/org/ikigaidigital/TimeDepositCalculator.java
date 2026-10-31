@@ -16,24 +16,31 @@ public class TimeDepositCalculator {
 
     public void updateBalance(List<TimeDeposit> timeDeposits) {
         for (TimeDeposit deposit : timeDeposits) {
-            double interest = 0;
-
-            if (deposit.getDays() > GRACE_PERIOD_DAYS) {
-                if (deposit.getPlanType().equals("student")) {
-                    if (deposit.getDays() < STUDENT_MAX_DAYS_EXCLUSIVE) {
-                        interest += deposit.getBalance() * STUDENT_ANNUAL_RATE / MONTHS_PER_YEAR;
-                    }
-                } else if (deposit.getPlanType().equals("premium")) {
-                    if (deposit.getDays() > PREMIUM_MIN_DAYS_EXCLUSIVE) {
-                        interest += deposit.getBalance() * PREMIUM_ANNUAL_RATE / MONTHS_PER_YEAR;
-                    }
-                } else if (deposit.getPlanType().equals("basic")) {
-                    interest += deposit.getBalance() * BASIC_ANNUAL_RATE / MONTHS_PER_YEAR;
-                }
-            }
-
-            double a2d = deposit.getBalance() + (new BigDecimal(interest).setScale(2, RoundingMode.HALF_UP)).doubleValue();
-            deposit.setBalance(a2d);
+            double interest = monthlyInterest(deposit);
+            deposit.setBalance(deposit.getBalance() + roundToCents(interest));
         }
+    }
+
+    // One month of interest for the deposit's plan. The plan type is read only after the grace period, and matched
+    // exactly and case-sensitively; unknown plans earn nothing.
+    private static double monthlyInterest(TimeDeposit deposit) {
+        if (deposit.getDays() <= GRACE_PERIOD_DAYS) {
+            return 0;
+        }
+        return switch (deposit.getPlanType()) {
+            case "student" -> deposit.getDays() < STUDENT_MAX_DAYS_EXCLUSIVE
+                    ? deposit.getBalance() * STUDENT_ANNUAL_RATE / MONTHS_PER_YEAR
+                    : 0;
+            case "premium" -> deposit.getDays() > PREMIUM_MIN_DAYS_EXCLUSIVE
+                    ? deposit.getBalance() * PREMIUM_ANNUAL_RATE / MONTHS_PER_YEAR
+                    : 0;
+            case "basic" -> deposit.getBalance() * BASIC_ANNUAL_RATE / MONTHS_PER_YEAR;
+            default -> 0;
+        };
+    }
+
+    // Only the interest is rounded, from its exact binary value (new BigDecimal(double)); the sum is not rounded.
+    private static double roundToCents(double amount) {
+        return new BigDecimal(amount).setScale(2, RoundingMode.HALF_UP).doubleValue();
     }
 }
