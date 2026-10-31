@@ -9,7 +9,7 @@ The solution is implemented in **Java** inside `java/`. The other language folde
 
 ## Goal
 - Exactly **two** REST endpoints, defined contract-first in `java/src/main/resources/openapi/openapi.yaml`
-  (source of truth; decisions in ADR-0002, ADR-0003, ADR-0004):
+  (source of truth; decisions in ADR-0002, ADR-0003, ADR-0004, ADR-0005):
   - `GET /api/v1/time-deposits` — list all time deposits (`id`, `planType`, `balance`, `days`, `withdrawals`)
   - `POST /api/v1/balance-updates` — apply monthly interest (`updateBalance`) to all stored time deposits
 - API changes start in the contract; never add endpoints beyond these two. Future ideas are recorded in a new ADR
@@ -33,7 +33,9 @@ Java 25, Spring Boot 4.1, Maven Wrapper (`./mvnw`), PostgreSQL, Flyway, contract
   - monthly interest = `balance * rate / 12`, computed as `double`
   - only the interest is rounded: `new BigDecimal(interest).setScale(2, HALF_UP)`, then added to the balance
 - Characterization tests must exist and pass **before** any refactoring of the calculator.
-- No additional endpoints beyond the two above.
+- No additional endpoints beyond the two above, and no other HTTP routes in the Spring Boot application (no
+  springdoc, actuator, static-resource handler or reachable `/error`; framework-derived `HEAD`/`OPTIONS`/`405`
+  excepted). Swagger UI runs as a separate Compose container, outside the application — ADR-0005.
 - Where requirements are ambiguous, make a logical assumption and justify it in a code comment.
 
 ## Architecture (hexagonal) — provisional
@@ -80,7 +82,9 @@ requires an ADR.
    - "breaking change": signature only vs. observable behaviour (treated as both)
    - "for any **existing** plans": all plans forever vs. only today's three — decide in the interest
      calculation ADR whether the 30-day rule is global or per policy
-   - "endpoint": API operation vs. any HTTP route (Swagger UI, actuator)
+   - "endpoint": API operation vs. any HTTP route (Swagger UI, actuator) — decided in ADR-0005: both readings
+     must hold, so the Spring Boot application maps no path and method beyond the two contract operations
+     (framework-derived `HEAD`/`OPTIONS`/`405` excepted)
 8. If the readings lead to different code, ask which one is meant, or implement the reading the legacy code
    supports and record the alternatives in a code comment at the point of use, and in an ADR when significant
    (rule 33).
