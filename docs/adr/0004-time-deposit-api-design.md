@@ -102,7 +102,8 @@ decided in the planned *Data model* ADR.
   idempotency keys with their outcomes (24-hour retention).
 - The REST adapter converts the legacy `Double` balance to a 2-decimal string using the rounding rule above;
   the domain is unchanged.
-- The planned *Hexagonal architecture* ADR must keep the idempotency key check and the balance update in one
-  transaction, and detect in-flight requests for the `409` response.
+- Key reservation and balance outcome must be atomic from the client's view. How in-flight requests are detected
+  for the `409` response (e.g. a committed in-progress record, removed on failure) is decided in the planned
+  *Hexagonal architecture* ADR.
 - Adding a currency later is a deliberate, versioned change.
 - Tests must not rely on collection order.

@@ -21,7 +21,7 @@ documented, triggerable via Swagger, and stable while the implementation is refa
 - **Base path:** `/api/v1`, declared once in `servers`; resource paths are relative to it.
 - **Usage:** server interfaces and DTOs are generated from the contract at build time (implementation phase);
   Swagger UI serves the same file.
-- Endpoint design is recorded separately (time deposit API design ADR).
+- Endpoint design is recorded separately in ADR-0004.
 
 ## Consequences
 - API changes start in `openapi.yaml` and are reviewed before code changes.
