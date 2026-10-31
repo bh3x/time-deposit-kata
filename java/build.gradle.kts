@@ -1,6 +1,7 @@
 plugins {
     java
     jacoco
+    alias(libs.plugins.spring.boot)
 }
 
 group = "org.ikigaidigital"
@@ -13,11 +14,16 @@ java {
 }
 
 dependencies {
-    // Spring Boot's dependency management as a platform (BOM), without the Boot plugin: the plugin's bootJar task
-    // needs a main class, which arrives with the first adapter step (ADR-0007, ADR-0008).
+    // Spring Boot's dependency management as a Gradle platform (BOM): the Boot plugin alone does not manage
+    // versions, and a platform constrains only the configurations that declare it (ADR-0007).
     implementation(platform(libs.spring.boot.dependencies))
     // Stereotype annotations for @UseCase (ADR-0008); the application layer may use nothing else from Spring.
     implementation(libs.spring.context)
+    // Persistence (ADR-0006, ADR-0008): JPA for the adapters, Flyway for the schema, PostgreSQL as the database.
+    implementation(libs.spring.boot.starter.data.jpa)
+    implementation(libs.spring.boot.starter.flyway)
+    implementation(libs.flyway.database.postgresql)
+    runtimeOnly(libs.postgresql)
 }
 
 tasks.withType<JavaCompile>().configureEach {
@@ -37,13 +43,16 @@ testing {
             }
         }
 
-        // Integration tests (Testcontainers is added with the persistence step).
+        // Integration tests on real PostgreSQL via Testcontainers (ADR-0009).
         register<JvmTestSuite>("integrationTest") {
             useJUnitJupiter()
             dependencies {
+                // The Boot platform comes with main's implementation configuration (extended below).
                 implementation(project())
-                implementation(platform(libs.spring.boot.dependencies))
                 implementation(libs.assertj.core)
+                implementation(libs.spring.boot.starter.data.jpa.test)
+                implementation(libs.spring.boot.testcontainers)
+                implementation(libs.testcontainers.postgresql)
             }
             targets {
                 all {
@@ -56,6 +65,10 @@ testing {
     }
 }
 
+// The integration tests see the main code's dependencies (Spring, JPA, the driver), not only its API.
+configurations["integrationTestImplementation"].extendsFrom(configurations.implementation.get())
+configurations["integrationTestRuntimeOnly"].extendsFrom(configurations.runtimeOnly.get())
+
 tasks.named("check") {
     dependsOn(testing.suites.named("integrationTest"))
 }
@@ -66,7 +79,9 @@ jacoco {
 }
 
 tasks.named<JacocoReport>("jacocoTestReport") {
-    dependsOn(tasks.named("test"))
+    // Both suites (ADR-0009): unit and architecture tests plus the Testcontainers integration tests.
+    dependsOn(tasks.named("test"), tasks.named("integrationTest"))
+    executionData(tasks.named("test").get(), tasks.named("integrationTest").get())
     reports {
         xml.required = true
         html.required = true

@@ -5,7 +5,9 @@ import com.tngtech.archunit.junit.AnalyzeClasses;
 import com.tngtech.archunit.junit.ArchTest;
 import com.tngtech.archunit.lang.ArchRule;
 import org.ikigaidigital.TimeDeposit;
+import org.ikigaidigital.TimeDepositApplication;
 import org.ikigaidigital.TimeDepositCalculator;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
 
 import static com.tngtech.archunit.core.domain.JavaClass.Predicates.belongToAnyOf;
 import static com.tngtech.archunit.core.domain.JavaClass.Predicates.resideInAPackage;
@@ -18,13 +20,19 @@ import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.classes;
 @AnalyzeClasses(packages = "org.ikigaidigital", importOptions = ImportOption.DoNotIncludeTests.class)
 class LegacyRootPackageArchitectureTest {
 
-    // ADR-0008 rule 3: the root package holds only the legacy classes and the Spring Boot main class (added later).
+    // ADR-0008 rule 3: the root package holds only the legacy classes and the Spring Boot main class.
     // Nested and compiler-generated classes (e.g. TimeDepositCalculator$1) belong to their top-level class.
     @ArchTest
     static final ArchRule rootPackageContainsOnlyPermittedClasses = classes()
             .that().resideInAPackage("org.ikigaidigital")
             .and().areTopLevelClasses()
             .should().haveNameMatching("org\\.ikigaidigital\\.(TimeDeposit|TimeDepositCalculator|TimeDepositApplication)");
+
+    // ADR-0008 decision 9: one Spring Boot application, in the root package, so scanning covers every capability.
+    @ArchTest
+    static final ArchRule onlyTimeDepositApplicationIsASpringBootApplication = classes()
+            .that().areAnnotatedWith(SpringBootApplication.class)
+            .should().haveFullyQualifiedName(TimeDepositApplication.class.getName());
 
     // ADR-0008 rule 3: TimeDeposit is the shared kernel and depends only on the JDK.
     @ArchTest
