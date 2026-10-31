@@ -1,5 +1,6 @@
 plugins {
     java
+    jacoco
 }
 
 group = "org.ikigaidigital"
@@ -55,4 +56,13 @@ testing {
 
 tasks.named("check") {
     dependsOn(testing.suites.named("integrationTest"))
+}
+
+// Coverage report only, no threshold: evidence that the characterization tests reach every branch.
+tasks.named<JacocoReport>("jacocoTestReport") {
+    dependsOn(tasks.named("test"))
+    reports {
+        xml.required = true
+        html.required = true
+    }
 }
