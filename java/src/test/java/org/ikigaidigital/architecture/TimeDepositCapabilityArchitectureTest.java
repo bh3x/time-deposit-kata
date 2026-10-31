@@ -12,6 +12,7 @@ import org.ikigaidigital.shared.application.UseCase;
 import org.ikigaidigital.timedeposit.application.model.TimeDepositView;
 import org.ikigaidigital.timedeposit.application.model.WithdrawalView;
 import org.ikigaidigital.timedeposit.domain.TimeDepositTerms;
+import org.springframework.stereotype.Controller;
 import org.springframework.stereotype.Service;
 
 import static com.tngtech.archunit.core.domain.JavaClass.Predicates.ANNOTATIONS;
@@ -155,6 +156,34 @@ class TimeDepositCapabilityArchitectureTest {
     static final ArchRule drivenAdaptersDoNotDependOnDrivingAdapters = noClasses()
             .that().resideInAPackage("..adapter.out..")
             .should().dependOnClassesThat().resideInAPackage("..adapter.in..");
+
+    @ArchTest
+    static final ArchRule drivingAdaptersDoNotDependOnDrivenAdapters = noClasses()
+            .that().resideInAPackage("..adapter.in..")
+            .should().dependOnClassesThat().resideInAPackage("..adapter.out..");
+
+    // Rule 1, stricter for the REST adapter: within the project it uses only use cases, the read model, the domain,
+    // the kernel and shared technical code (incl. the generated API) — never services, driven ports or adapters.
+    @ArchTest
+    static final ArchRule restAdapterUsesOnlyUseCasesModelsAndDomain = classes()
+            .that().resideInAPackage("org.ikigaidigital.timedeposit.adapter.in.rest..")
+            .should().onlyDependOnClassesThat(
+                    not(resideInAPackage("org.ikigaidigital.."))
+                            .or(resideInAnyPackage(
+                                    "org.ikigaidigital.timedeposit.adapter.in.rest..",
+                                    "org.ikigaidigital.timedeposit.application.port.in..",
+                                    "org.ikigaidigital.timedeposit.application.model..",
+                                    "org.ikigaidigital.timedeposit.domain..",
+                                    "org.ikigaidigital.shared.."))
+                            .or(belongToAnyOf(TimeDeposit.class, TimeDepositCalculator.class)));
+
+    // Rule 6 and ADR-0005: every controller is a REST adapter implementing a generated API interface, so it maps only
+    // operations of the contract.
+    @ArchTest
+    static final ArchRule controllersImplementTheGeneratedApi = classes()
+            .that().areMetaAnnotatedWith(Controller.class)
+            .should().resideInAPackage("..adapter.in.rest..")
+            .andShould().implement(resideInAPackage("org.ikigaidigital.shared.adapter.in.rest.api.."));
 
     // Decision 4 (G6 groundwork): the read model never exposes the mutable legacy object or an internal key.
     @ArchTest

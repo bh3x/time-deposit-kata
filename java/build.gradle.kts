@@ -88,6 +88,8 @@ testing {
             dependencies {
                 implementation(libs.assertj.core)
                 implementation(libs.archunit.junit5)
+                // Web slice tests: @WebMvcTest, MockMvcTester, @MockitoBean (ADR-0009).
+                implementation(libs.spring.boot.starter.webmvc.test)
             }
         }
 
@@ -101,6 +103,8 @@ testing {
                 implementation(libs.spring.boot.starter.data.jpa.test)
                 implementation(libs.spring.boot.testcontainers)
                 implementation(libs.testcontainers.postgresql)
+                // End-to-end tests over HTTP (ADR-0009).
+                implementation(libs.spring.boot.resttestclient)
             }
             targets {
                 all {
