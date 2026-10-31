@@ -1,6 +1,6 @@
 # ADR-0002: Contract-first OpenAPI approach
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-10-31
 
 ## Context

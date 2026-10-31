@@ -1,6 +1,6 @@
 # ADR-0004: Time deposit API design
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-10-31
 
 ## Context
