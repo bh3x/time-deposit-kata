@@ -1,0 +1,58 @@
+plugins {
+    java
+}
+
+group = "org.ikigaidigital"
+version = "1.0-SNAPSHOT"
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(25)
+    }
+}
+
+dependencies {
+    // Spring Boot's dependency management as a platform (BOM), without the Boot plugin: the plugin's bootJar task
+    // needs a main class, which arrives with the first adapter step (ADR-0007, ADR-0008).
+    implementation(platform(libs.spring.boot.dependencies))
+}
+
+tasks.withType<JavaCompile>().configureEach {
+    options.encoding = "UTF-8"
+    // Compiler warnings fail the build (CLAUDE.md rule 35).
+    options.compilerArgs.addAll(listOf("-Xlint:all", "-Werror"))
+}
+
+testing {
+    suites {
+        // Unit and architecture tests: no Docker needed (ADR-0007).
+        val test = named<JvmTestSuite>("test") {
+            useJUnitJupiter()
+            dependencies {
+                implementation(libs.assertj.core)
+                implementation(libs.archunit.junit5)
+            }
+        }
+
+        // Integration tests (Testcontainers is added with the persistence step).
+        register<JvmTestSuite>("integrationTest") {
+            useJUnitJupiter()
+            dependencies {
+                implementation(project())
+                implementation(platform(libs.spring.boot.dependencies))
+                implementation(libs.assertj.core)
+            }
+            targets {
+                all {
+                    testTask.configure {
+                        shouldRunAfter(test)
+                    }
+                }
+            }
+        }
+    }
+}
+
+tasks.named("check") {
+    dependsOn(testing.suites.named("integrationTest"))
+}
