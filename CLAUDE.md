@@ -21,8 +21,9 @@ The solution is implemented in **Java** inside `java/`. The other language folde
 - Interest logic that is extensible to new plan types, without changing existing behaviour
 
 ## Target stack
-Java 25, Spring Boot 4.1, Maven Wrapper (`./mvnw`), PostgreSQL, Flyway, contract-first OpenAPI
-(`openapi.yaml` + openapi-generator), JUnit 5 + AssertJ, Testcontainers, Docker Compose.
+Decided in ADR-0007: Java 25 (Gradle toolchain), Spring Boot 4.1, Gradle 9.x with Kotlin DSL and wrapper
+(`./gradlew`), version catalog `gradle/libs.versions.toml`, Spring Data JPA, PostgreSQL, Flyway, contract-first
+OpenAPI (`openapi.yaml` + openapi-generator), JUnit 5 + AssertJ, ArchUnit, Testcontainers, Docker Compose.
 
 ## Hard constraints
 - `org.ikigaidigital.TimeDeposit`: no breaking changes (package, constructor, getters, `setBalance`).
@@ -38,20 +39,27 @@ Java 25, Spring Boot 4.1, Maven Wrapper (`./mvnw`), PostgreSQL, Flyway, contract
   excepted). Swagger UI runs as a separate Compose container, outside the application — ADR-0005.
 - Where requirements are ambiguous, make a logical assumption and justify it in a code comment.
 
-## Architecture (hexagonal) — provisional
-The layout below is a **working assumption** until the hexagonal architecture ADR in `docs/adr/` is accepted;
-this section will then be updated to match it. Until then, follow this layout as the default; any deviation
-requires an ADR.
-- `domain` – pure Java: entities, interest policies (Strategy + registry). No Spring/JPA imports.
-- `application` – use cases and ports (`port/in`, `port/out`). No web/persistence details.
-- `adapter/in/rest` – controllers implementing the generated OpenAPI interfaces.
-- `adapter/out/persistence` – JPA entities, repositories, mapping (`BigDecimal` <-> `Double`).
-- Dependencies point inward only: adapters → application → domain.
+## Architecture (hexagonal)
+Defined in ADR-0008 (the source of truth; any deviation needs a new ADR). Summary:
+- **Capability first, hexagon inside:** `org.ikigaidigital.<capability>/{domain, application, adapter}`; today
+  `timedeposit`. A capability is a business area with its own use cases and data, not a package per endpoint.
+- **Root package:** only the legacy `TimeDeposit` and `TimeDepositCalculator` (shared domain kernel) and the
+  Spring Boot main class `TimeDepositApplication`.
+- `application/port/in` (driving side, `…UseCase`) and `application/port/out` (driven side, `…Port`), named by
+  purpose; services in `application/service` carry `@UseCase` (a `@Service` stereotype) and `@Transactional`.
+- `adapter/in/rest` implements the generated OpenAPI interface (one tag per capability); `adapter/out/persistence`
+  holds JPA entities, repositories and the two-way mapping (`Double` ↔ `NUMERIC(15,2)`).
+- `shared` is technical only (`@UseCase`, money formatting, Problem Details); `configuration` holds
+  `@Configuration` classes (e.g. the `TimeDepositCalculator` bean).
+- **Rules (ArchUnit):** dependencies point inward (adapter → application → domain); capabilities talk only via
+  `port.in`; the domain and legacy classes use no framework; the application layer may use only Spring
+  stereotype and transaction annotations.
 
 ## Code style
 - SOLID, small classes, constructor injection, no field injection.
 - Prefer clear, explicit code over clever Spring "magic".
-- Tests: JUnit 5 + AssertJ; integration tests use Testcontainers (`*IT.java`).
+- Tests: JUnit 5 + AssertJ; unit and architecture tests in `src/test`; integration tests (Testcontainers) in the
+  separate `src/integrationTest` suite (ADR-0007).
 
 ## Working rules
 
@@ -104,7 +112,7 @@ requires an ADR.
 13. Characterization tests pin legacy behaviour. Once green and committed, a failing characterization test means
     the code is wrong, not the test. Never weaken, skip or delete a test to get to green — ask instead.
 14. Pick the right level: domain rules → unit tests; persistence → Testcontainers ITs; contract and wiring →
-    web/IT tests; architecture → ArchUnit (once adopted). Don't test the same rule twice at a higher level
+    web/IT tests; architecture → ArchUnit (ADR-0008). Don't test the same rule twice at a higher level
     without a reason.
 
 ### Depth and completeness (design)
@@ -158,17 +166,18 @@ requires an ADR.
     AI-assisted and why. No transcripts, prompt logs or per-step usage details.
 
 ### Definition of done
-35. **Code increment:** failing test first (rule 11) → green `./mvnw verify` → no compiler warnings (enforced
+35. **Code increment:** failing test first (rule 11) → green `./gradlew check` → no compiler warnings (enforced
     with `-Xlint:all -Werror`, configured in the tooling step; generated sources excluded or targeted
-    `-Xlint:-<key>` suppressions justified there) → ArchUnit green (once adopted via ADR) →
+    `-Xlint:-<key>` suppressions justified there) → ArchUnit green (ADR-0008) →
     assumptions recorded (rule 33) → atomic Conventional Commits → `/review` (incl. brief compliance) clean or
     findings listed as Follow-ups (rule 32) → `/ship`.
 36. **Docs/design increment:** contract lint clean or warnings accepted in an ADR (rule 21) → ADRs and indexes
     consistent → `/review` clean or findings listed as Follow-ups (rule 32) → ADR status flip last → `/ship`.
 
 ## Commands
-- Build & unit tests: `cd java && ./mvnw test`
-- Full build incl. integration tests (Docker required): `cd java && ./mvnw verify`
+The Gradle build is introduced in the tooling step (ADR-0007); until then these commands do not exist yet.
+- Build & unit/architecture tests: `cd java && ./gradlew test`
+- Full build incl. integration tests (Docker required): `cd java && ./gradlew check`
 - Run locally: `cd java && docker compose up`
 - Lint the API contract (Docker required):
   `docker run --rm --network none -v "$(git rev-parse --show-toplevel)/java/src/main/resources/openapi:/spec:ro" redocly/cli:2.68.0 lint /spec/openapi.yaml`
