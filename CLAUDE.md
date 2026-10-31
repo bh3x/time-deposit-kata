@@ -8,10 +8,12 @@ The solution is implemented in **Java** inside `java/`. The other language folde
 (`c#/`, `kotlin/`, `python/`, `typescript/`) are the original starters and must not be modified.
 
 ## Goal
-- Exactly **two** REST endpoints (paths, methods and payloads are **provisional** — the API contract is
-  still to be designed; `openapi.yaml` becomes the source of truth once agreed):
-  - list all time deposits (`id`, `planType`, `balance`, `days`, `withdrawals`) — e.g. `GET /time-deposits`
-  - update the balances of all stored time deposits via `updateBalance` — e.g. `POST /time-deposits/balances`
+- Exactly **two** REST endpoints, defined contract-first in `java/src/main/resources/openapi/openapi.yaml`
+  (source of truth; decisions in ADR-0002, ADR-0003, ADR-0004):
+  - `GET /api/v1/time-deposits` — list all time deposits (`id`, `planType`, `balance`, `days`, `withdrawals`)
+  - `POST /api/v1/balance-updates` — apply monthly interest (`updateBalance`) to all stored time deposits
+- API changes start in the contract; never add endpoints beyond these two. Future ideas are recorded in a new ADR
+  (see ADR-0004 *Future extensions*).
 - `TimeDeposit` has no withdrawals: the list response is built from a separate model/read path, never by changing
   `TimeDeposit`.
 - The README must explain how to trigger both endpoints using the Swagger contract.

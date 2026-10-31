@@ -1,0 +1,115 @@
+# ADR-0004: Time deposit API design
+
+- **Status:** Accepted
+- **Date:** 2026-10-31
+
+## Context
+The brief requires exactly two operations: retrieve all time deposits (`id`, `planType`, `balance`, `days`,
+`withdrawals`) and update the balances of all time deposits. Resources are designed first, independent of URIs,
+following the conventions in ADR-0003.
+
+## Options considered
+**Identifiers:** expose the integer primary key · public UUID (v4 random / v7 time-ordered) alongside the internal
+integer key · encoded integer (Sqids/Hashids — reversible obfuscation) · UUID primary key.
+**Money:** binary floating point (`double`) · decimal number · decimal string · integer minor units · money object
+with currency.
+**Ordering:** unspecified · unspecified with deterministic implementation · documented default order.
+
+## Decision
+### Time Deposits (collection)
+- Represented as a JSON array of Time Deposit; supported operation: **read the whole collection**.
+- **Order is not guaranteed** by the contract. The implementation returns a deterministic order (internal key)
+  so repeated calls are stable, without promising it. Sorting may be added later as an optional parameter.
+
+### Time Deposit / Withdrawal
+- Attributes exactly as the brief; withdrawals are embedded in their time deposit (dependent entity, no
+  `timeDepositId` in the representation).
+- **Identifiers:** the brief requires a field named `id` but does not require it to be the database key.
+  To prevent enumeration and leaking counts via sequential keys, the API `id` carries a random **UUID v4**,
+  stored in a separate `publicId` column (time deposits and withdrawals). The internal Integer primary key `id`
+  (required by the brief and the legacy `TimeDeposit` class) and the `timeDepositId` foreign key are never exposed.
+  Mapping rule: API `id` ↔ DB `publicId`.
+- **Money:** decimal **string** with exactly two fraction digits (e.g. `"10000.00"`), as common in banking APIs;
+  no binary floating point on the wire. **Single currency** assumed — the brief defines none. Amounts are
+  **non-negative** (a balance or withdrawal is never below zero). Conversion from the legacy `Double`:
+  `BigDecimal.valueOf(d).setScale(2, RoundingMode.HALF_UP)` — the rounding mode the legacy calculator uses for
+  interest — applied when producing the representation. How balances are stored (column scale) is decided in
+  the planned *Data model* ADR.
+- **planType:** string with `x-extensible-enum` (`basic`, `student`, `premium`); case-sensitive. The known values
+  are also listed in the description, as Swagger UI does not display the extension.
+- **days:** non-negative integer — the age of the time deposit in days **as stored**; this API never advances it
+  (balance updates do not change it). Assumption: the brief does not define `days`; keeping it unchanged
+  preserves the legacy `updateBalance` behaviour.
+- **Balance and withdrawals:** `balance` is the current balance, already net of past withdrawals; withdrawals are
+  a history record. Assumption — the brief does not relate them, and the interest calculation ignores withdrawals.
+
+### Endpoint: list time deposits
+- `GET /time-deposits` (relative to `/api/v1`), operationId `listTimeDeposits`, tag `TimeDeposits`
+  (generates `TimeDepositsApi.listTimeDeposits()`).
+- Path uses the plural resource name in kebab-case.
+- Responses: `200` with `TimeDeposits` (empty array if none); `500` with Problem Details. No other errors apply:
+  the operation takes no input and requires no authentication. The Redocly `operation-4xx-response` warning is
+  therefore accepted.
+- **No authentication:** not required by the brief; declared explicitly with a top-level `security: []`, so adding
+  authentication later is a deliberate contract change.
+
+### Balance Update
+The brief's "update the balances of all time deposits in the database" is read as: a client-triggered operation
+that applies one round of the existing monthly interest rules (`TimeDepositCalculator.updateBalance`) to every
+stored time deposit and saves the resulting balances. No input; no other attribute changes (`days` is not
+incremented, withdrawals are not involved).
+
+- **Modelled as a process resource** (a balance update run), not as a state change of the collection: it is an
+  action with an outcome and is not idempotent.
+- **Endpoint:** `POST /balance-updates` (relative to `/api/v1`), operationId `createBalanceUpdate`, tag
+  `TimeDeposits`. Top-level rather than `/time-deposits/balance-updates`: the run is not contained in the time
+  deposits (it acts on them), and nesting would collide with a future `/time-deposits/{id}`.
+- **Synchronous:** the response is returned after all balances are stored.
+- **Serialised runs:** balance update runs never overlap. Two concurrent runs would read the same balances and one
+  run's interest would be lost, breaking "each call applies interest again". The locking mechanism is decided in
+  the planned *Hexagonal architecture* ADR.
+- **Response:** `200 OK` with a `BalanceUpdate` summary: `processedCount` (all deposits processed, including those
+  whose balance did not change) and `executedAt` (UTC). Not `201 Created`: runs are not retrievable, so there is
+  no `Location` to point to.
+- **Idempotency:** optional `Idempotency-Key` header (1–255 characters). Without a key, each call applies interest
+  again (documented). With a key:
+  - a repeated request returns the original outcome (same status and body, original `executedAt`) without
+    applying interest again;
+  - a request with the same key that is still in progress gets `409 Conflict` (as in the IETF Idempotency-Key
+    draft); the client retries later;
+  - a failed request stores nothing, so a retry with the same key runs the update;
+  - keys are retained for 24 hours.
+- Errors: `400` Problem Details for a malformed key, `409` as above, `500` for unexpected errors.
+
+## Future extensions (not part of this contract)
+The brief allows exactly two endpoints, so the following is recorded for later only — not specified in
+`openapi.yaml` and not implemented.
+
+### Get a single time deposit
+- `GET /time-deposits/{id}`, operationId `getTimeDeposit`, tag `TimeDeposits`.
+- Path parameter `id`: the public UUID (`format: uuid`) — never the internal key.
+- Responses: `200` with `TimeDeposit` (same representation as a list item, including withdrawals);
+  `400` Problem Details for a malformed UUID; `404` Problem Details if no time deposit has that id;
+  `500` Problem Details.
+- Fits the current design without changes: the `TimeDeposit` schema is reused, and random UUIDs make
+  item URLs non-enumerable.
+
+### Open question: how withdrawals are created
+The brief stores and returns withdrawals but defines no way to create them. Candidate channels, undecided:
+- **Synchronous API** (customer/teller action) — needs validation, authentication and idempotency.
+- **Asynchronous event** from another system (e.g. core banking) — message consumer, duplicate handling.
+- **Scheduled/batch import** — interacts with the timing of balance updates.
+
+The read representation is the same in every case. How sample withdrawals are loaded for this exercise is
+decided in the planned *Data model* ADR.
+
+## Consequences
+- The planned *Data model* ADR needs a unique public UUID per time deposit and withdrawal, and storage for
+  idempotency keys with their outcomes (24-hour retention).
+- The REST adapter converts the legacy `Double` balance to a 2-decimal string using the rounding rule above;
+  the domain is unchanged.
+- Key reservation and balance outcome must be atomic from the client's view. How in-flight requests are detected
+  for the `409` response (e.g. a committed in-progress record, removed on failure) is decided in the planned
+  *Hexagonal architecture* ADR.
+- Adding a currency later is a deliberate, versioned change.
+- Tests must not rely on collection order.
