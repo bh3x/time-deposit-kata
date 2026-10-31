@@ -9,8 +9,9 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * Lists the time deposits by delegating to the read port. Deliberately thin: listing needs no domain logic, and the
- * list is a single query, so no transaction is declared (ADR-0008).
+ * Lists the time deposits by delegating to the read port. Deliberately thin: listing needs no domain logic. No
+ * transaction is declared because the port contract requires a consistent snapshot; if an adapter cannot provide
+ * one, this service gets {@code @Transactional(readOnly = true)} (ADR-0008).
  */
 @UseCase
 public final class ListTimeDepositsService implements ListTimeDepositsUseCase {

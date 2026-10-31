@@ -9,8 +9,9 @@ public interface LoadTimeDepositViewsPort {
 
     /**
      * Returns all time deposits with their withdrawals as an unmodifiable list, never {@code null}: deposits ordered
-     * by internal key, withdrawals by date and then internal key — deterministic, not guaranteed by the contract
-     * (ADR-0004, ADR-0008).
+     * by internal key, withdrawals by date and then internal key — deterministic, but not guaranteed by the OpenAPI
+     * contract (ADR-0004, ADR-0008). The result is a consistent snapshot: implementations read deposits and
+     * withdrawals together (e.g. in one statement), because the use case declares no transaction.
      */
     List<TimeDepositView> loadAll();
 }
