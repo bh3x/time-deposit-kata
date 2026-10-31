@@ -82,7 +82,8 @@ requires an ADR.
      calculation ADR whether the 30-day rule is global or per policy
    - "endpoint": API operation vs. any HTTP route (Swagger UI, actuator)
 8. If the readings lead to different code, ask which one is meant, or implement the reading the legacy code
-   supports and record the alternatives in an ADR and a code comment at the point of use.
+   supports and record the alternatives in a code comment at the point of use, and in an ADR when significant
+   (rule 33).
 9. Watch scope words: "exactly", "all", "only", "no", "existing", "required", "without". They are constraints,
    not wording.
 10. Start from the broadest reasonable reading (all plans, all deposits, all layers affected), then narrow it
@@ -154,7 +155,8 @@ requires an ADR.
 
 ### Definition of done
 35. **Code increment:** failing test first (rule 11) → green `./mvnw verify` → no compiler warnings (enforced
-    with `-Xlint:all -Werror`, configured in the tooling step) → ArchUnit green (once adopted via ADR) →
+    with `-Xlint:all -Werror`, configured in the tooling step; generated sources excluded or targeted
+    `-Xlint:-<key>` suppressions justified there) → ArchUnit green (once adopted via ADR) →
     assumptions recorded (rule 33) → atomic Conventional Commits → `/review` (incl. brief compliance) clean or
     findings listed as Follow-ups (rule 32) → `/ship`.
 36. **Docs/design increment:** contract lint clean or warnings accepted in an ADR (rule 21) → ADRs and indexes
@@ -165,4 +167,4 @@ requires an ADR.
 - Full build incl. integration tests (Docker required): `cd java && ./mvnw verify`
 - Run locally: `cd java && docker compose up`
 - Lint the API contract (Docker required):
-  `docker run --rm --network none -v "$PWD/java/src/main/resources/openapi:/spec:ro" redocly/cli:2.68.0 lint /spec/openapi.yaml`
+  `docker run --rm --network none -v "$(git rev-parse --show-toplevel)/java/src/main/resources/openapi:/spec:ro" redocly/cli:2.68.0 lint /spec/openapi.yaml`

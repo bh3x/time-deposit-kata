@@ -11,7 +11,8 @@ Check:
   "only", "no", "existing", "required", "without") respected; ambiguous terms resolved by an assumption in a code
   comment, and in an ADR when significant
 - Branch name follows the convention; the ADR status flip (if any) is the last commit of the PR
-- After `openapi.yaml` changes, the lint result was run and reported
+- After `openapi.yaml` changes, the redocly lint was run and its result is stated in the PR description or
+  commit message
 - Tests at the right level (unit / IT / web), boundary cases on both sides of each rule
 - `TimeDeposit` and `TimeDepositCalculator.updateBalance` signature/behaviour unchanged
 - Hexagonal boundaries: no Spring/JPA in `domain`; adapters depend inward only
