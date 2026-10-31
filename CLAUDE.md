@@ -43,13 +43,15 @@ OpenAPI (`openapi.yaml` + openapi-generator), JUnit 5 + AssertJ, ArchUnit, Testc
 Defined in ADR-0008 (the source of truth; any deviation needs a new ADR). Summary:
 - **Capability first, hexagon inside:** `org.ikigaidigital.<capability>/{domain, application, adapter}`; today
   `timedeposit`. A capability is a business area with its own use cases and data, not a package per endpoint.
-- **Root package:** only the legacy `TimeDeposit` and `TimeDepositCalculator` (shared domain kernel) and the
-  Spring Boot main class `TimeDepositApplication`.
+- **Root package:** only the legacy `TimeDeposit` (shared domain kernel, unchanged) and the Spring Boot main class
+  `TimeDepositApplication`. `TimeDepositCalculator` moves to `timedeposit/domain` after the characterization tests
+  exist (`updateBalance` signature and behaviour unchanged).
 - `application/port/in` (driving side, `…UseCase`) and `application/port/out` (driven side, `…Port`), named by
   purpose; services in `application/service` carry `@UseCase` (a `@Service` stereotype) and `@Transactional`.
 - `adapter/in/rest` implements the generated OpenAPI interface (one tag per capability); `adapter/out/persistence`
   holds JPA entities, repositories and the two-way mapping (`Double` ↔ `NUMERIC(15,2)`).
-- `shared` is technical only (`@UseCase`, money formatting, Problem Details); `configuration` holds
+- `shared` is technical only (`@UseCase`, money formatting, Problem Details, generated OpenAPI code in
+  `shared.adapter.in.rest.api/.model`); `configuration` holds
   `@Configuration` classes (e.g. the `TimeDepositCalculator` bean).
 - **Rules (ArchUnit):** dependencies point inward (adapter → application → domain); capabilities talk only via
   `port.in`; the domain and legacy classes use no framework; the application layer may use only Spring
@@ -178,6 +180,7 @@ Defined in ADR-0008 (the source of truth; any deviation needs a new ADR). Summar
 The Gradle build is introduced in the tooling step (ADR-0007); until then these commands do not exist yet.
 - Build & unit/architecture tests: `cd java && ./gradlew test`
 - Full build incl. integration tests (Docker required): `cd java && ./gradlew check`
-- Run locally: `cd java && docker compose up`
+- Run the full stack locally: `cd java && docker compose up`; the application alone against a running
+  PostgreSQL: `cd java && ./gradlew bootRun`
 - Lint the API contract (Docker required):
   `docker run --rm --network none -v "$(git rev-parse --show-toplevel)/java/src/main/resources/openapi:/spec:ro" redocly/cli:2.68.0 lint /spec/openapi.yaml`

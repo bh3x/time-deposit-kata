@@ -15,7 +15,8 @@ flowchart LR
 ## 2. Containers (C4 level 2)
 ```mermaid
 flowchart LR
-  ui["Swagger UI container<br/>loads openapi.yaml"] -- "HTTP calls" --> app
+  ui["Swagger UI container<br/>serves the UI and openapi.yaml"] -- "page + contract" --> browser["Browser<br/>(Swagger UI page)"]
+  browser -- "HTTP calls (CORS)" --> app
   client["API client (curl)"] --> app
   app["Time Deposit Service<br/>Java 25 · Spring Boot 4.1<br/>(ADR-0007)"] -- "JDBC / JPA" --> db[("PostgreSQL<br/>timeDeposits · withdrawals · idempotencyKeys<br/>(ADR-0006)")]
 ```
@@ -40,12 +41,13 @@ flowchart LR
       svc2["ApplyMonthlyInterestService"]
       out1["LoadTimeDepositViewsPort"]
       out2["LoadTimeDepositsPort · SaveTimeDepositsPort"]
-      out3["BalanceUpdateRecordPort"]
+      out3["RecordBalanceUpdatePort"]
     end
-    subgraph domain["domain"]
-      legacy["TimeDeposit · TimeDepositCalculator<br/>(legacy, unchanged)"]
+    subgraph domain["timedeposit/domain"]
+      calc["TimeDepositCalculator<br/>(moved; updateBalance unchanged)"]
       terms["TimeDepositTerms · ReadOnlyTimeDeposit"]
     end
+    kernel["TimeDeposit<br/>(root package, shared kernel, unchanged)"]
   end
   subgraph persistence["adapter/out/persistence (driven)"]
     jpa["JPA entities · repositories · adapters"]
@@ -54,9 +56,11 @@ flowchart LR
   svc1 -. implements .-> in1
   svc2 -. implements .-> in2
   svc1 --> out1
-  svc2 --> out2 & out3 & legacy
+  svc2 --> out2 & out3 & calc
   jpa -. implements .-> out1 & out2 & out3
   svc1 --> terms
+  ctrl --> terms
+  calc --> kernel
 ```
 - **Dependencies point inward:** adapters depend on ports; the application depends on the domain; the domain has
   no framework dependencies. ArchUnit enforces the rules of ADR-0008.
@@ -101,13 +105,14 @@ sequenceDiagram
   S-->>R: BalanceUpdateResult(processedCount, executedAt)
   R-->>C: 200 BalanceUpdate
 ```
-Pending the planned *Balance update consistency* ADR: serialising concurrent runs and writers, the idempotency
-flow (replay, in-flight `409`, stale keys, cleanup), overflow handling and behaviour at scale.
+Pending the planned *Balance update consistency* ADR (list in ADR-0008): serialising concurrent runs and writers,
+the idempotency flow (reservation, replay, in-flight `409`, stale keys, cleanup), single-deposit failures such as
+overflow, and behaviour at scale.
 
 ## 5. Cross-cutting concerns
 - **Money:** stored as `NUMERIC(15,2)` (ADR-0006); the legacy domain computes in `Double`; the persistence adapter
-  maps `Double` ↔ `NUMERIC` with `BigDecimal.valueOf(..).setScale(2, HALF_UP)`; the API shows decimal strings with
-  two fraction digits (ADR-0004).
+  reads with `BigDecimal.doubleValue()` and writes with `BigDecimal.valueOf(..).setScale(2, HALF_UP)`; the API
+  shows decimal strings with two fraction digits (ADR-0004).
 - **Identifiers:** the API `id` is the `publicId` UUID; internal integer keys never leave the persistence adapter
   (ADR-0004, ADR-0006).
 - **Persistence mapping:** JPA entities exist only in the persistence adapter and are mapped two-way to

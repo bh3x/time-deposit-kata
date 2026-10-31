@@ -8,13 +8,15 @@ The brief leaves the stack open ("Use any tools, frameworks, or libraries you fi
 OpenAPI contract, hexagonal architecture and Testcontainers. The Java starter in `java/` is a plain Maven project
 on Java 17 with JUnit 5 and AssertJ, without a wrapper or Spring. The target stack has so far only been a working
 assumption in `CLAUDE.md` (Maven Wrapper, Java 25, Spring Boot 4.1); ADR-0002 mentions "the Maven build" in passing.
-The tooling step needs the build tool, Java version and framework line decided first.
+The tooling step needs the build tool, Java version and framework line decided first. This ADR refines ADR-0002's
+remark about "the Maven build" without superseding it: the generator plugin is configured in whichever build this
+ADR chooses.
 
 Facts checked on 2026-10-31 in primary sources:
 - Spring Boot 4.1 (4.1.2 at the time of writing) requires Java 17 or later and supports up to Java 27; it supports
   Maven 3.6.3 or later and Gradle 8.14 or later / 9.x ([system requirements][boot-req],
   [4.1 release notes][boot-41]).
-- Java 25 is an LTS release (GA 2025-09-16); Oracle's free updates for JDK 21 end in October 2026
+- Java 25 is the current LTS release (GA 2025-09-16) with the longest support window
   ([Oracle roadmap][oracle], [JDK 25][jdk25]).
 - Gradle runs on and compiles for Java 25 from 9.1.0 ([compatibility matrix][gradle-compat],
   [9.1.0 release notes][gradle-91]). Maven 4.0 is still a release candidate; the stable line is 3.9.x
@@ -29,8 +31,8 @@ Facts checked on 2026-10-31 in primary sources:
    cache; Spring Boot itself is built with Gradle. The build script is code, so it can be over-engineered, and it
    replaces the starter's `pom.xml`.
 
-**Java version:** 17 (starter; oldest supported LTS) · 21 LTS (widely deployed; free Oracle updates end October
-2026) · 25 LTS (current LTS, longest support).
+**Java version:** 17 (starter; oldest supported LTS) · 21 LTS (widely deployed, older LTS) · 25 LTS (current
+LTS, longest support).
 
 **Framework line:** Spring Boot 4.1.x (current; Spring Framework 7, Jakarta EE 11) · Spring Boot 3.5.x (previous
 generation; an older baseline for a new project).
@@ -43,10 +45,13 @@ management plus versions written inline in the build script.
 
 ## Decision
 - **Build tool: Gradle 9.x with the Kotlin DSL and the Gradle Wrapper** (at least 9.1.0 for Java 25; the exact
-  version is pinned from the official release page in the tooling step). On merit it is the more modern tool and
-  fits the stack at least as well as Maven; the project is small, so its value is the type-safe script and the
-  separate test suites rather than build speed. Guard rail: no custom build logic beyond plugin configuration, so
-  the build stays as readable as a declarative one.
+  version is pinned from the official release page in the tooling step). Both tools support the whole stack; the
+  deciding points are the type-checked build script with IDE completion, first-class separate test suites (Maven
+  needs failsafe plus an extra plugin for a separate source directory), and a straightforward path to
+  multi-project builds if capabilities later become modules (ADR-0008). Build speed is not a factor at this size.
+  The cost is leaving the starter's tool: the `pom.xml` is replaced, which is allowed (only `java/` is ours) and
+  explained here for reviewers. Guard rail: no custom build logic beyond plugin configuration, so the build stays
+  as readable as a declarative one.
 - **Java 25 LTS**, configured as a Gradle toolchain so the build uses Java 25 regardless of the JVM that starts
   Gradle. The legacy code compiles unchanged.
 - **Spring Boot 4.1.x** (exact patch pinned in the tooling step).
@@ -64,10 +69,12 @@ management plus versions written inline in the build script.
 ## Consequences
 - The tooling step replaces the starter's `pom.xml` with the Gradle build, adds the wrapper and moves the build to
   Java 25; the existing calculator test must stay green.
-- Commands change: `./gradlew test` (unit), `./gradlew check` (all tests), `./gradlew bootRun` (run locally).
+- `check` must depend on the `integrationTest` suite; the tooling step wires this explicitly rather than relying on
+  a default.
+- Commands change: `./gradlew test` (unit), `./gradlew check` (all tests), `docker compose up` (run the full
+  stack), `./gradlew bootRun` (run the application against an already running PostgreSQL).
   `CLAUDE.md` is updated in this PR; `.claude/settings.json` (allows `./mvnw`) and `AI_USAGE.md` are updated in the
   tooling step together with the build.
-- ADR-0002's remark about "the Maven build" is read as "the build": the generator plugin is configured in Gradle.
 - Compiler warnings as errors (`-Xlint:all -Werror`, CLAUDE.md rule 35) are configured on the Java compile tasks,
   with generated sources excluded or suppressions justified there.
 - Versions are pinned only from primary sources (CLAUDE.md rule 20).
