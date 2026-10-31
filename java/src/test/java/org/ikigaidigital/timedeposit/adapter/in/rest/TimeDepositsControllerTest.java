@@ -7,6 +7,8 @@ import org.junit.jupiter.api.Test;
 import org.skyscreamer.jsonassert.JSONCompareMode;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.json.JsonAssert;
@@ -144,12 +146,45 @@ class TimeDepositsControllerTest {
     @DisplayName("POST /balance-updates")
     class CreateBalanceUpdate {
 
-        // Placeholder until the POST step implements the operation; that step replaces this test on purpose.
+        // Placeholder until the POST step implements the operation; that step replaces this test on purpose. Until then
+        // it fails like any unexpected error: a 500 the contract declares.
         @Test
         void isNotImplementedYet() {
             assertThat(mvc.post().uri("/api/v1/balance-updates"))
-                    .hasFailed()
-                    .failure().hasRootCauseInstanceOf(UnsupportedOperationException.class);
+                    .hasStatus(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .hasContentType(MediaType.APPLICATION_PROBLEM_JSON);
+        }
+    }
+
+    @Nested
+    @DisplayName("errors as Problem Details (ADR-0003)")
+    class Errors {
+
+        // R5: no stack trace or exception message reaches the client, and absent optional fields are omitted.
+        @Test
+        void rendersAnUnexpectedErrorAsInternalServerError() {
+            given(listTimeDeposits.listAll()).willThrow(new IllegalStateException("secret internal detail"));
+
+            assertThat(mvc.get().uri(TIME_DEPOSITS))
+                    .hasStatus(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .hasContentType(MediaType.APPLICATION_PROBLEM_JSON)
+                    .bodyJson()
+                    .hasPathSatisfying("$.status", status -> assertThat(status).isEqualTo(500))
+                    .hasPathSatisfying("$.title", title -> assertThat(title).isEqualTo("Internal Server Error"))
+                    .doesNotHavePath("$.detail");
+            assertThat(mvc.get().uri(TIME_DEPOSITS)).body().asString()
+                    .doesNotContain("secret internal detail")
+                    .doesNotContain("null");
+        }
+
+        // The catch-all must not take over Spring MVC's own exceptions: a wrong method stays a 405.
+        @Test
+        void keepsSpringMvcErrorsAsTheirOwnStatus() {
+            assertThat(mvc.post().uri(TIME_DEPOSITS))
+                    .hasStatus(HttpStatus.METHOD_NOT_ALLOWED)
+                    .hasContentType(MediaType.APPLICATION_PROBLEM_JSON)
+                    .hasHeader(HttpHeaders.ALLOW, "GET")
+                    .bodyJson().hasPathSatisfying("$.status", status -> assertThat(status).isEqualTo(405));
         }
     }
 }
