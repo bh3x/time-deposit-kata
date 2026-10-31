@@ -2,9 +2,9 @@ package org.ikigaidigital.timedeposit.adapter.in.rest;
 
 import org.ikigaidigital.shared.adapter.in.rest.MoneyFormatter;
 import org.ikigaidigital.shared.adapter.in.rest.api.TimeDepositsApi;
-import org.ikigaidigital.shared.adapter.in.rest.model.BalanceUpdate;
-import org.ikigaidigital.shared.adapter.in.rest.model.TimeDeposit;
-import org.ikigaidigital.shared.adapter.in.rest.model.Withdrawal;
+import org.ikigaidigital.shared.adapter.in.rest.model.BalanceUpdateDto;
+import org.ikigaidigital.shared.adapter.in.rest.model.TimeDepositDto;
+import org.ikigaidigital.shared.adapter.in.rest.model.WithdrawalDto;
 import org.ikigaidigital.timedeposit.application.model.TimeDepositView;
 import org.ikigaidigital.timedeposit.application.model.WithdrawalView;
 import org.ikigaidigital.timedeposit.application.port.in.ListTimeDepositsUseCase;
@@ -30,7 +30,7 @@ class TimeDepositsController implements TimeDepositsApi {
     }
 
     @Override
-    public ResponseEntity<List<TimeDeposit>> listTimeDeposits() {
+    public ResponseEntity<List<TimeDepositDto>> listTimeDeposits() {
         return ResponseEntity.ok(listTimeDeposits.listAll().stream()
                 .map(TimeDepositsController::toTimeDeposit)
                 .toList());
@@ -39,20 +39,20 @@ class TimeDepositsController implements TimeDepositsApi {
     // Placeholder: skipDefaultInterface makes every contract operation mandatory at compile time, and the balance
     // update is implemented in a later step. Until then the request fails like any unexpected error.
     @Override
-    public ResponseEntity<BalanceUpdate> createBalanceUpdate(@Nullable String idempotencyKey) {
+    public ResponseEntity<BalanceUpdateDto> createBalanceUpdate(@Nullable String idempotencyKey) {
         throw new UnsupportedOperationException("POST /balance-updates is not implemented yet");
     }
 
-    private static TimeDeposit toTimeDeposit(TimeDepositView view) {
+    private static TimeDepositDto toTimeDeposit(TimeDepositView view) {
         TimeDepositTerms terms = view.terms();
-        List<Withdrawal> withdrawals = view.withdrawals().stream()
+        List<WithdrawalDto> withdrawals = view.withdrawals().stream()
                 .map(TimeDepositsController::toWithdrawal)
                 .toList();
-        return new TimeDeposit(view.id(), terms.getPlanType(), MoneyFormatter.format(terms.getBalance()),
+        return new TimeDepositDto(view.id(), terms.getPlanType(), MoneyFormatter.format(terms.getBalance()),
                 terms.getDays(), withdrawals);
     }
 
-    private static Withdrawal toWithdrawal(WithdrawalView view) {
-        return new Withdrawal(view.id(), MoneyFormatter.format(view.amount()), view.date());
+    private static WithdrawalDto toWithdrawal(WithdrawalView view) {
+        return new WithdrawalDto(view.id(), MoneyFormatter.format(view.amount()), view.date());
     }
 }

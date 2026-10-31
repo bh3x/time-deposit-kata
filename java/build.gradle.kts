@@ -42,6 +42,11 @@ openApiGenerate {
     outputDir = generatedOpenApiDir
     apiPackage = "org.ikigaidigital.shared.adapter.in.rest.api"
     modelPackage = "org.ikigaidigital.shared.adapter.in.rest.model"
+    // ADR-0002: generated models end in Dto (e.g. TimeDepositDto), so they never clash with domain classes such as
+    // the legacy TimeDeposit; schema names in the contract stay suffix-free.
+    modelNameSuffix = "Dto"
+    // Removed or renamed schemas must not leave stale classes behind that still compile.
+    cleanupOutput = true
     configOptions = mapOf(
         "interfaceOnly" to "true",
         "skipDefaultInterface" to "true",
@@ -64,14 +69,12 @@ openApiGenerate {
     )
 }
 
+// Derived from the task, so every consumer of the main sources (compilation, IDE import, sources jar) runs the
+// generator first without an explicit dependsOn.
 sourceSets {
     main {
-        java.srcDir(generatedOpenApiDir.map { it.dir("src/main/java") })
+        java.srcDir(tasks.named("openApiGenerate").map { generatedOpenApiDir.get().dir("src/main/java") })
     }
-}
-
-tasks.named("compileJava") {
-    dependsOn(tasks.named("openApiGenerate"))
 }
 
 tasks.withType<JavaCompile>().configureEach {
@@ -134,6 +137,10 @@ tasks.named<JacocoReport>("jacocoTestReport") {
     // Both suites (ADR-0009): unit and architecture tests plus the Testcontainers integration tests.
     dependsOn(tasks.named("test"), tasks.named("integrationTest"))
     executionData(tasks.named("test").get(), tasks.named("integrationTest").get())
+    // Generated OpenAPI code is not ours to cover; it would only dilute the report.
+    classDirectories.setFrom(sourceSets.main.get().output.classesDirs.asFileTree.matching {
+        exclude("org/ikigaidigital/shared/adapter/in/rest/api/**", "org/ikigaidigital/shared/adapter/in/rest/model/**")
+    })
     reports {
         xml.required = true
         html.required = true
