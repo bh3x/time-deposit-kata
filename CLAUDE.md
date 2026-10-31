@@ -179,7 +179,6 @@ Defined in ADR-0008 (the source of truth; any deviation needs a new ADR). Summar
     consistent → `/review` clean or findings listed as Follow-ups (rule 32) → ADR status flip last → `/ship`.
 
 ## Commands
-The Gradle build is introduced in the tooling step (ADR-0007); until then these commands do not exist yet.
 - Build & unit/architecture tests: `cd java && ./gradlew test`
 - Full build incl. integration tests (Docker required): `cd java && ./gradlew check`
 - Run the full stack locally: `cd java && docker compose up`; the application alone against a running
