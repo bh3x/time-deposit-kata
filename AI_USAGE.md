@@ -8,7 +8,7 @@
 | File | Purpose |
 |---|---|
 | [`CLAUDE.md`](CLAUDE.md) | Project rules loaded by Claude Code: context, hard constraints, architecture, git workflow |
-| [`.claude/settings.json`](.claude/settings.json) | Shared permissions: read-only git commands and Maven builds allowed; git changes, pushes and PRs require confirmation; common force-push, recursive-delete and `.env`-read patterns denied |
+| [`.claude/settings.json`](.claude/settings.json) | Shared permissions: read-only git commands and Gradle builds allowed; git changes, pushes and PRs require confirmation; common force-push, recursive-delete and `.env`-read patterns denied |
 | `.claude/settings.local.json` | Personal overrides (gitignored) |
 | [`.claude/commands/`](.claude/commands/) | Workflow slash commands: `/step` (start an increment), `/review` (review the diff), `/ship` (push and open a PR) |
 | [`.claude/agents/code-reviewer.md`](.claude/agents/code-reviewer.md) | Read-only reviewer subagent that checks changes against `CLAUDE.md` |

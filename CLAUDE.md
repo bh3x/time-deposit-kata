@@ -108,8 +108,9 @@ Defined in ADR-0008 (the source of truth; any deviation needs a new ADR). Summar
 ### Test first
 11. No production code without a failing test that needs it; show the red test before making it pass.
     Exceptions: characterization tests (they pin existing behaviour and pass immediately) and pure refactoring
-    (runs under already-green tests). Configuration, build and migration changes (`pom.xml`, Flyway, Compose)
-    are covered by integration tests rather than a dedicated red unit test. The red state is shown, not committed.
+    (runs under already-green tests). Configuration, build and migration changes (Gradle build files, Flyway,
+    Compose) are covered by integration tests rather than a dedicated red unit test. The red state is shown, not
+    committed.
 12. Derive test cases from the rules, not from the implementation: boundaries on both sides (30/31, 45/46,
     365/366), each plan, unknown plan, zero/large balances, rounding edges, several deposits in one call.
     Prefer `@ParameterizedTest` with readable case names.
@@ -179,7 +180,6 @@ Defined in ADR-0008 (the source of truth; any deviation needs a new ADR). Summar
     consistent → `/review` clean or findings listed as Follow-ups (rule 32) → ADR status flip last → `/ship`.
 
 ## Commands
-The Gradle build is introduced in the tooling step (ADR-0007); until then these commands do not exist yet.
 - Build & unit/architecture tests: `cd java && ./gradlew test`
 - Full build incl. integration tests (Docker required): `cd java && ./gradlew check`
 - Run the full stack locally: `cd java && docker compose up`; the application alone against a running
