@@ -11,6 +11,58 @@ servers:
 paths: {}
 components:
   schemas:
+    TimeDeposits:
+      type: array
+      description: >
+        All time deposits. The order of items is not guaranteed; clients must not rely on it.
+      items:
+        $ref: '#/components/schemas/TimeDeposit'
+    TimeDeposit:
+      type: object
+      required: [id, planType, balance, days, withdrawals]
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Public identifier of the time deposit.
+          example: 3f2a6c1e-8b7d-4e2a-9c41-7d5e0b6a9f12
+        planType:
+          type: string
+          description: Plan of the time deposit; case-sensitive. New plan types may be added.
+          x-extensible-enum: [basic, student, premium]
+          example: premium
+        balance:
+          $ref: '#/components/schemas/Amount'
+        days:
+          type: integer
+          format: int32
+          minimum: 0
+          description: Age of the time deposit in days.
+          example: 120
+        withdrawals:
+          type: array
+          description: Withdrawals of this time deposit; empty if none.
+          items:
+            $ref: '#/components/schemas/Withdrawal'
+    Withdrawal:
+      type: object
+      required: [id, amount, date]
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: 9b1d4c7a-2e3f-4a5b-8c6d-0e1f2a3b4c5d
+        amount:
+          $ref: '#/components/schemas/Amount'
+        date:
+          type: string
+          format: date
+          example: '2026-09-15'
+    Amount:
+      type: string
+      pattern: '^-?\d+\.\d{2}$'
+      description: Monetary amount as a decimal string with exactly two fraction digits (single currency).
+      example: '10000.00'
     Problem:
       type: object
       description: RFC 9457 Problem Details (application/problem+json).
