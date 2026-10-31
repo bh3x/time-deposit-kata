@@ -1,6 +1,7 @@
 plugins {
     java
     jacoco
+    alias(libs.plugins.spring.boot)
 }
 
 group = "org.ikigaidigital"
@@ -13,8 +14,8 @@ java {
 }
 
 dependencies {
-    // Spring Boot's dependency management as a platform (BOM), without the Boot plugin: the plugin's bootJar task
-    // needs a main class, which arrives with the first adapter step (ADR-0007, ADR-0008).
+    // Spring Boot's dependency management as a Gradle platform (BOM): the Boot plugin alone does not manage
+    // versions, and a platform constrains only the configurations that declare it (ADR-0007).
     implementation(platform(libs.spring.boot.dependencies))
     // Stereotype annotations for @UseCase (ADR-0008); the application layer may use nothing else from Spring.
     implementation(libs.spring.context)

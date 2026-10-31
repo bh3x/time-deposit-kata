@@ -1,0 +1,9 @@
+spring:
+  application:
+    name: time-deposit-service
+  jpa:
+    # The schema is owned by Flyway (ADR-0006); Hibernate only checks that the entities match it.
+    hibernate:
+      ddl-auto: validate
+    # No lazy loading during web rendering: entities never leave the persistence adapter (ADR-0008).
+    open-in-view: false
