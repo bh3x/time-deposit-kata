@@ -20,8 +20,12 @@ An ADR captures one significant decision: its context, the options considered, t
 | [0004](0004-time-deposit-api-design.md) | Time deposit API design | Accepted | 2026-10-31 |
 | [0005](0005-endpoint-scope.md) | Endpoint scope | Accepted | 2026-10-31 |
 | [0006](0006-data-model.md) | Data model | Accepted | 2026-10-31 |
+| [0007](0007-technology-stack-and-build.md) | Technology stack and build | Accepted | 2026-10-31 |
+| [0008](0008-hexagonal-architecture.md) | Hexagonal architecture | Accepted | 2026-10-31 |
 
 ## Planned decisions
 Numbers are assigned when each ADR is written.
-- Hexagonal architecture
 - Interest calculation design
+- Balance update consistency (concurrent runs and writers, idempotency reservation and flow, in-flight `409` and
+  stale keys, key check vs lock order, 24-hour cleanup, single-deposit failures such as overflow, scale — see
+  ADR-0008); must be accepted before `POST /balance-updates` is implemented

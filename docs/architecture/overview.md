@@ -1,29 +1,141 @@
 # Architecture Overview
 
-> Skeleton — sections are completed as the related ADRs are accepted.
+How the Time Deposit service is structured. Each section summarises accepted decisions; the ADRs hold the
+reasoning ([ADR index](../adr/README.md)). Topics still open are marked as pending.
 
 ## 1. System context (C4 level 1)
-_TBD — see upcoming ADRs._
+An API client (a developer using Swagger UI or `curl`) lists time deposits and triggers the monthly balance
+update. The service stores time deposits and their withdrawals.
+
 ```mermaid
 flowchart LR
-  client[API client] --> system[Time Deposit Service]
+  client["API client<br/>(Swagger UI, curl)"] -- "HTTP/JSON<br/>2 operations (ADR-0004, ADR-0005)" --> system["Time Deposit Service"]
 ```
 
 ## 2. Containers (C4 level 2)
-_TBD — application technology and integration are decided in upcoming ADRs._
 ```mermaid
 flowchart LR
-  app[Time Deposit Service] --> db[(Relational database<br/>PostgreSQL per the brief)]
+  ui["Swagger UI container<br/>serves the UI and openapi.yaml"] -- "page + contract" --> browser["Browser<br/>(Swagger UI page)"]
+  browser -- "HTTP calls (CORS)" --> app
+  client["API client (curl)"] --> app
+  app["Time Deposit Service<br/>Java 25 · Spring Boot 4.1<br/>(ADR-0007)"] -- "JDBC / JPA" --> db[("PostgreSQL<br/>timeDeposits · withdrawals · idempotencyKeys<br/>(ADR-0006)")]
 ```
+- The application serves exactly the two contract operations; Swagger UI runs as its own container
+  (ADR-0005). How the UI reaches the API (server URL, CORS) is settled in the Docker step.
+- Schema and demo seed data are applied by Flyway (ADR-0006).
 
 ## 3. Components (C4 level 3)
-_TBD — hexagonal structure (ports & adapters), see architecture ADRs._
+Hexagonal architecture (Ports & Adapters), organised by capability (ADR-0008). Today there is one capability,
+`timedeposit`; later capabilities (e.g. `withdrawal`) get the same inner layout.
+
+```mermaid
+flowchart LR
+  subgraph rest["adapter/in/rest (driving)"]
+    ctrl["TimeDepositsController<br/>implements generated TimeDepositsApi"]
+  end
+  subgraph core["inside the hexagon"]
+    subgraph app["application"]
+      in1["ListTimeDepositsUseCase"]
+      in2["ApplyMonthlyInterestUseCase"]
+      svc1["ListTimeDepositsService"]
+      svc2["ApplyMonthlyInterestService"]
+      out1["LoadTimeDepositViewsPort"]
+      out2["LoadTimeDepositsPort · SaveTimeDepositsPort"]
+      out3["RecordBalanceUpdatePort"]
+    end
+    subgraph domain["timedeposit/domain"]
+      terms["TimeDepositTerms · ReadOnlyTimeDeposit"]
+      policies["interest/ (interest ADR)"]
+    end
+    subgraph root["root package (legacy, unchanged)"]
+      calc["TimeDepositCalculator<br/>(belongs to timedeposit)"]
+      kernel["TimeDeposit<br/>(shared kernel)"]
+    end
+  end
+  subgraph persistence["adapter/out/persistence (driven)"]
+    jpa["JPA entities · repositories · adapters"]
+  end
+  ctrl --> in1 & in2
+  svc1 -. implements .-> in1
+  svc2 -. implements .-> in2
+  svc1 --> out1
+  svc2 --> out2 & out3 & calc
+  jpa -. implements .-> out1 & out2 & out3
+  svc1 --> terms
+  ctrl --> terms
+  calc --> kernel
+  calc -. "after refactoring" .-> policies
+```
+- **Dependencies point inward:** adapters depend on ports; the application depends on the domain; the domain has
+  no framework dependencies. ArchUnit enforces the rules of ADR-0008.
+- **Ports:** `port.in` is the driving side (the application's API), `port.out` the driven side (what it needs).
+- **Wiring:** services carry `@UseCase` (a `@Service` stereotype); `TimeDepositCalculator` is an explicit `@Bean`
+  in `configuration`; the main class sits in the root package.
 
 ## 4. Key flows
-_TBD — list time deposits; update all balances._
+
+### List time deposits — `GET /api/v1/time-deposits`
+```mermaid
+sequenceDiagram
+  participant C as Client
+  participant R as TimeDepositsController
+  participant S as ListTimeDepositsService
+  participant P as Persistence adapter
+  participant DB as PostgreSQL
+  C->>R: GET /api/v1/time-deposits
+  R->>S: listAll()
+  S->>P: LoadTimeDepositViewsPort
+  P->>DB: deposits + withdrawals (fetch join, ordered)
+  DB-->>P: rows
+  P-->>S: List<TimeDepositView> (TimeDeposit wrapped read-only + withdrawals)
+  S-->>R: views
+  R-->>C: 200 TimeDeposits (balance as decimal string, API id = publicId)
+```
+
+### Apply monthly interest — `POST /api/v1/balance-updates`
+```mermaid
+sequenceDiagram
+  participant C as Client
+  participant R as TimeDepositsController
+  participant S as ApplyMonthlyInterestService (@Transactional)
+  participant K as TimeDepositCalculator
+  participant P as Persistence adapter
+  C->>R: POST /api/v1/balance-updates [Idempotency-Key]
+  R->>S: apply(key)
+  S->>P: LoadTimeDepositsPort.loadAll()
+  P-->>S: List<TimeDeposit>
+  S->>K: updateBalance(list)
+  S->>P: SaveTimeDepositsPort.saveAll(list)
+  S-->>R: BalanceUpdateResult(processedCount, executedAt)
+  R-->>C: 200 BalanceUpdate
+```
+Pending the planned *Balance update consistency* ADR (list in ADR-0008): serialising concurrent runs and writers,
+the idempotency flow (reservation, replay, in-flight `409`, stale keys, cleanup), single-deposit failures such as
+overflow, and behaviour at scale.
 
 ## 5. Cross-cutting concerns
-_TBD — money representation, persistence mapping, transactions._
+- **Money:** stored as `NUMERIC(15,2)` (ADR-0006); the legacy domain computes in `Double`; the persistence adapter
+  reads with `BigDecimal.doubleValue()` and writes with `BigDecimal.valueOf(..).setScale(2, HALF_UP)`; the API
+  shows decimal strings with two fraction digits (ADR-0004).
+- **Identifiers:** the API `id` is the `publicId` UUID; internal integer keys never reach the API
+  (ADR-0004, ADR-0006).
+- **Persistence mapping:** JPA entities exist only in the persistence adapter and are mapped two-way to
+  `TimeDeposit`; identifiers are quoted camelCase as in the brief (ADR-0006, ADR-0008).
+- **Transactions:** `@Transactional` on use-case services; adapters call services only through `port.in`
+  (ADR-0008).
+- **Errors:** RFC 9457 Problem Details for all errors handled by Spring MVC, including `404` for unknown paths;
+  no other HTTP routes exist (ADR-0003, ADR-0005).
+- **Testing:** unit tests for domain and application with in-memory fakes of `port.out`; integration tests
+  (`src/integrationTest`, Testcontainers) for adapters and endpoints; ArchUnit for the architecture rules
+  (ADR-0007, ADR-0008).
 
 ## Related decisions
-See [ADR index](../adr/README.md).
+| Topic | ADR |
+|---|---|
+| Contract-first OpenAPI | [ADR-0002](../adr/0002-contract-first-openapi.md) |
+| API conventions, errors | [ADR-0003](../adr/0003-api-conventions.md) |
+| Time deposit API design | [ADR-0004](../adr/0004-time-deposit-api-design.md) |
+| Endpoint scope | [ADR-0005](../adr/0005-endpoint-scope.md) |
+| Data model | [ADR-0006](../adr/0006-data-model.md) |
+| Technology stack and build | [ADR-0007](../adr/0007-technology-stack-and-build.md) |
+| Hexagonal architecture | [ADR-0008](../adr/0008-hexagonal-architecture.md) |
