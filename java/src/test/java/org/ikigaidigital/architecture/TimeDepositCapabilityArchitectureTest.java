@@ -17,16 +17,19 @@ import static com.tngtech.archunit.core.domain.JavaClass.Predicates.ANNOTATIONS;
 import static com.tngtech.archunit.core.domain.JavaClass.Predicates.belongToAnyOf;
 import static com.tngtech.archunit.core.domain.JavaClass.Predicates.resideInAPackage;
 import static com.tngtech.archunit.core.domain.JavaClass.Predicates.resideInAnyPackage;
+import static com.tngtech.archunit.base.DescribedPredicate.not;
 import static com.tngtech.archunit.lang.conditions.ArchConditions.be;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.classes;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.fields;
+import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.methods;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noMethods;
 import static com.tngtech.archunit.library.dependencies.SlicesRuleDefinition.slices;
 
 /**
- * Architecture rules for capabilities and the shared package (ADR-0008, Rules). Rules for adapters are added in the
- * steps that introduce them: ArchUnit fails a rule whose set of classes is empty.
+ * Architecture rules for the timedeposit capability and the shared package (ADR-0008, Rules). The dependency rules
+ * are written per capability, as ADR-0008 rule 1 allows; a new capability gets its own. Rules for adapters are added
+ * in the steps that introduce them: ArchUnit fails a rule whose set of classes is empty.
  */
 @AnalyzeClasses(packages = "org.ikigaidigital", importOptions = ImportOption.DoNotIncludeTests.class)
 class TimeDepositCapabilityArchitectureTest {
@@ -61,13 +64,15 @@ class TimeDepositCapabilityArchitectureTest {
             .matching("org.ikigaidigital.(*)..")
             .should().beFreeOfCycles();
 
-    // Rule 4: shared depends on no capability and, in its application package, holds only annotations (no business
-    // logic or ports).
+    // Rule 4: shared depends on no capability — nothing in the project except itself and the kernel.
     @ArchTest
     static final ArchRule sharedDependsOnNoCapability = noClasses()
             .that().resideInAPackage("org.ikigaidigital.shared..")
-            .should().dependOnClassesThat().resideInAPackage("org.ikigaidigital.timedeposit..");
+            .should().dependOnClassesThat(resideInAPackage("org.ikigaidigital..")
+                    .and(not(resideInAPackage("org.ikigaidigital.shared..")))
+                    .and(not(belongToAnyOf(TimeDeposit.class))));
 
+    // Rule 4 ("no business logic and no business ports"), read strictly for shared.application: annotations only.
     @ArchTest
     static final ArchRule sharedApplicationContainsOnlyAnnotations = classes()
             .that().resideInAPackage("org.ikigaidigital.shared.application..")
@@ -76,12 +81,12 @@ class TimeDepositCapabilityArchitectureTest {
     // Decision 5: ports are named by purpose with the suffix of their side.
     @ArchTest
     static final ArchRule drivingPortsEndWithUseCase = classes()
-            .that().resideInAPackage("..application.port.in..")
+            .that().resideInAPackage("..application.port.in..").and().areTopLevelClasses()
             .should().haveSimpleNameEndingWith("UseCase");
 
     @ArchTest
     static final ArchRule drivenPortsEndWithPort = classes()
-            .that().resideInAPackage("..application.port.out..")
+            .that().resideInAPackage("..application.port.out..").and().areTopLevelClasses()
             .should().haveSimpleNameEndingWith("Port");
 
     // Rule 7: every driving-port implementation is a @UseCase service, and @Transactional appears nowhere else.
@@ -120,9 +125,9 @@ class TimeDepositCapabilityArchitectureTest {
             .should().haveRawReturnType(TimeDeposit.class);
 
     @ArchTest
-    static final ArchRule timeDepositTermsHasNoSetterOrInternalId = noMethods()
+    static final ArchRule timeDepositTermsOffersOnlyItsThreeGetters = methods()
             .that().areDeclaredIn(TimeDepositTerms.class)
-            .should().haveNameMatching("set.*|getId");
+            .should().haveNameMatching("getPlanType|getBalance|getDays");
 
     @ArchTest
     static final ArchRule timeDepositViewHasOnlyItsPublicComponents = fields()
