@@ -1,3 +1,9 @@
+plugins {
+    // Lets the Java 25 toolchain (ADR-0007) be downloaded when no local JDK 25 exists. Settings plugins cannot use
+    // the version catalog, so its version is pinned here.
+    id("org.gradle.toolchains.foojay-resolver-convention") version "1.0.0"
+}
+
 rootProject.name = "time-deposit-kata"
 
 dependencyResolutionManagement {
