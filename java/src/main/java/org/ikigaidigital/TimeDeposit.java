@@ -13,7 +13,9 @@ public class TimeDeposit {
         this.days = days;
     }
 
-    public int getId() { return id; }
+    public int getId() {
+        return id;
+    }
 
     public String getPlanType() {
         return planType;
