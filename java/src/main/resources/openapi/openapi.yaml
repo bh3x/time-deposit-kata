@@ -24,7 +24,7 @@ components:
         id:
           type: string
           format: uuid
-          description: Public identifier of the time deposit.
+          description: Public identifier (random UUID v4). Not the internal database key.
           example: 3f2a6c1e-8b7d-4e2a-9c41-7d5e0b6a9f12
         planType:
           type: string
@@ -51,6 +51,7 @@ components:
         id:
           type: string
           format: uuid
+          description: Public identifier (random UUID v4). Not the internal database key.
           example: 9b1d4c7a-2e3f-4a5b-8c6d-0e1f2a3b4c5d
         amount:
           $ref: '#/components/schemas/Amount'
