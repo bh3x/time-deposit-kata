@@ -62,7 +62,7 @@ erDiagram
         DATE date
     }
     idempotencyKeys {
-        VARCHAR key PK
+        VARCHAR idempotencyKey PK
         VARCHAR status
         INTEGER processedCount
         TIMESTAMPTZ executedAt
@@ -70,6 +70,7 @@ erDiagram
         TIMESTAMPTZ completedAt
     }
 ```
+Types are abbreviated in the diagram; the exact types follow below.
 
 ### Naming
 **Quoted camelCase**, exactly the brief's names: `"timeDeposits"`, `"planType"`, `"timeDepositId"`; the added
@@ -85,8 +86,8 @@ with the Hibernate quoting mechanism).
   `publicId`.
 - **`publicId`:** `UUID NOT NULL UNIQUE DEFAULT gen_random_uuid()` on both tables — a random (version 4) UUID as
   ADR-0004 requires, built into PostgreSQL 13 and later (to be verified in the persistence step). Any writer gets
-  a UUID without application code; seed rows may set fixed UUIDs; the adapter reads the generated value back after
-  an insert.
+  a UUID without application code; seed rows may set fixed UUIDs; any future insert path (and tests) reads the
+  generated value back after an insert.
 - **`balance`, `amount`:** `NUMERIC(15,2)` — cent precision, maximum `9,999,999,999,999.99`. The precision
   enforces the bound the balance mapping relies on (below 10^13).
 - **`days`:** `INTEGER`; the age as stored, never advanced (ADR-0004).
@@ -101,9 +102,9 @@ with the Hibernate quoting mechanism).
   interest rounded to 2 decimals, so the exact decimal sum has 2 decimals. The `Double` addition can add float
   noise (`1000.10 + 0.83` gives `1000.9300000000001`). Below 2^44 (about 1.76 × 10^13) one unit in the last place
   is at most 2^-9; reading the stored value, the interest, the addition and `BigDecimal.valueOf` together stay
-  below 0.005 (about 0.004 in the worst case), so rounding to scale 2 recovers the exact sum. `BigDecimal.valueOf`
-  relies on `Double.toString` returning the shortest decimal that maps back to the same `Double` (specified since
-  JDK 19; unverified, Java 25 is used). Because the error stays below half a cent, the rounding mode does not
+  at most 4 × 2^-10 ≈ 0.0039, below 0.005, so rounding to scale 2 recovers the exact sum. `BigDecimal.valueOf`
+  relies on `Double.toString` returning a decimal that converts back to the same `Double`, so it lies within half
+  a unit in the last place of it. Because the error stays below half a cent, the rounding mode does not
   affect the result; `HALF_UP` is chosen for consistency with the legacy calculator.
 - **Baseline:** the equivalence holds **per call**, given the balance as stored. Float noise from an earlier call
   is deliberately not carried into the next one, as an in-memory chain of legacy calls would; at a half-cent edge
@@ -120,12 +121,14 @@ with the Hibernate quoting mechanism).
 
 ### Idempotency keys
 Table `"idempotencyKeys"`, only for requests that send an `Idempotency-Key` (ADR-0004):
-- `key VARCHAR(255) PRIMARY KEY` — the header allows 1–255 characters;
+- `idempotencyKey VARCHAR(255) PRIMARY KEY` — the header allows 1–255 characters (not `key`, an SQL keyword);
 - `status VARCHAR(20) NOT NULL`, `CHECK (status IN ('IN_PROGRESS', 'COMPLETED'))`;
 - `processedCount INTEGER` (`>= 0`) and `executedAt TIMESTAMPTZ` — the balance update's outcome, `NULL` while in
   progress;
 - `createdAt TIMESTAMPTZ NOT NULL`, `completedAt TIMESTAMPTZ`;
-- `CHECK`: a `COMPLETED` row has `processedCount`, `executedAt` and `completedAt`.
+- `CHECK`, both directions: a row is `COMPLETED` if and only if `processedCount`, `executedAt` and `completedAt`
+  are all set — `(status = 'COMPLETED') = (processedCount IS NOT NULL AND executedAt IS NOT NULL AND completedAt IS
+  NOT NULL)`.
 
 Rules for using the table:
 - It stores the domain outcome, not an HTTP response; the REST adapter re-renders the same status and body from it.
@@ -152,10 +155,11 @@ their own data; no other environment gets demo rows. The seed covers:
 - `days = 0`;
 - an unknown plan type and `Basic` (case-sensitive matching), both with `days > 30` so that only the plan type
   explains the missing interest;
-- a zero balance and a large balance near the column maximum;
-- half-cent interest edges, where the legacy rounding of the binary `double` differs: `basic` with balance
-  `6.00` (interest 0.005, rounded up to 0.01) and `basic` with balance `18.00` (interest 0.015, rounded down to
-  0.01), both with `days > 30`;
+- a zero balance and a large balance (`1,000,000,000.00`) that leaves room for many interest runs below the
+  column maximum;
+- half-cent interest edges, both `basic` with `days > 30`: balance `6.00` (binary interest just above 0.005,
+  rounded up to 0.01, as decimal rounding would — control case) and balance `18.00` (binary interest just below
+  0.015, rounded down to 0.01 where decimal `HALF_UP` would give 0.02);
 - deposits with several, one and no withdrawals.
 
 ## Consequences
@@ -163,7 +167,9 @@ their own data; no other environment gets demo rows. The seed covers:
   not silently.
 - Stored balances are always at cent precision; the API's 2-decimal representation (ADR-0004) is then lossless.
 - Balances of `10^13` or more cannot be stored; an update that would exceed the column fails instead of losing
-  precision.
+  precision. Because a balance update stores all deposits in one transaction, one such deposit aborts the whole
+  run (all-or-nothing); how single-deposit failures are handled is decided in the planned *Hexagonal
+  architecture* ADR.
 - Unknown plan types can be stored and earn no interest, exactly as in the legacy calculator.
 - How Flyway numbers and orders migrations across the two locations is settled in the persistence step.
 - **Verification (persistence step, Testcontainers):**
