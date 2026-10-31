@@ -21,8 +21,8 @@ An ADR captures one significant decision: its context, the options considered, t
 | [0005](0005-endpoint-scope.md) | Endpoint scope | Accepted | 2026-10-31 |
 | [0006](0006-data-model.md) | Data model | Accepted | 2026-10-31 |
 | [0007](0007-technology-stack-and-build.md) | Technology stack and build | Proposed | 2026-10-31 |
+| [0008](0008-hexagonal-architecture.md) | Hexagonal architecture | Proposed | 2026-10-31 |
 
 ## Planned decisions
 Numbers are assigned when each ADR is written.
-- Hexagonal architecture
 - Interest calculation design
