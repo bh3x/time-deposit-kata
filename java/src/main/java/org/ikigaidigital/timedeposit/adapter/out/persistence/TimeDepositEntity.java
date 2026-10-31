@@ -6,6 +6,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.OneToMany;
+import jakarta.persistence.OrderBy;
 import jakarta.persistence.Table;
 
 import java.math.BigDecimal;
@@ -16,7 +17,9 @@ import java.util.UUID;
 /**
  * JPA mapping of {@code "timeDeposits"} (ADR-0006). It never leaves the persistence adapter: the adapter maps it to
  * the legacy {@code TimeDeposit} (ADR-0008, two-way mapping). Every name is quoted explicitly to match the brief's
- * camelCase; Spring Boot's default naming strategy keeps quoted names as they are, so no custom strategy is needed.
+ * camelCase; Spring Boot's default naming strategy keeps quoted names as they are, so no custom strategy is needed
+ * (verified; ADR-0006 expected one). An unquoted name would be turned into snake_case, which {@code ddl-auto: validate}
+ * reports at startup.
  */
 @Entity
 @Table(name = "\"timeDeposits\"")
@@ -31,6 +34,7 @@ class TimeDepositEntity {
     @Column(name = "\"publicId\"", nullable = false, insertable = false, updatable = false)
     private UUID publicId;
 
+    // TEXT as in ADR-0006: free text without length limit, so every plan type the legacy code accepts can be stored.
     @Column(name = "\"planType\"", nullable = false, columnDefinition = "text")
     private String planType;
 
@@ -40,7 +44,9 @@ class TimeDepositEntity {
     @Column(name = "\"balance\"", nullable = false, precision = 15, scale = 2)
     private BigDecimal balance;
 
+    // Same order as the list query, so any load path returns withdrawals by date, then internal key.
     @OneToMany(mappedBy = "timeDeposit")
+    @OrderBy("date asc, id asc")
     private List<WithdrawalEntity> withdrawals = new ArrayList<>();
 
     protected TimeDepositEntity() {

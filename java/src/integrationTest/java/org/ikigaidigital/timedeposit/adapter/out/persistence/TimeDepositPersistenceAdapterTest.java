@@ -1,5 +1,6 @@
 package org.ikigaidigital.timedeposit.adapter.out.persistence;
 
+import jakarta.persistence.EntityManager;
 import jakarta.persistence.EntityManagerFactory;
 import org.hibernate.SessionFactory;
 import org.hibernate.stat.Statistics;
@@ -20,6 +21,7 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 
 import javax.sql.DataSource;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -42,6 +44,9 @@ class TimeDepositPersistenceAdapterTest {
 
     @Autowired
     private EntityManagerFactory entityManagerFactory;
+
+    @Autowired
+    private EntityManager entityManager;
 
     private JdbcClient jdbc;
     private TimeDepositRows rows;
@@ -72,8 +77,10 @@ class TimeDepositPersistenceAdapterTest {
         void mapsEveryDepositColumnIntoTheView() {
             rows.insertDeposit(uuid("000000000001"), "premium", 46, "1234.56");
 
-            TimeDepositView view = adapter.loadAll().getFirst();
+            List<TimeDepositView> views = adapter.loadAll();
+            TimeDepositView view = views.getFirst();
 
+            assertThatThrownBy(() -> views.add(view)).isInstanceOf(UnsupportedOperationException.class);
             assertThat(view.id()).isEqualTo(uuid("000000000001"));
             assertThat(view.terms().getPlanType()).isEqualTo("premium");
             assertThat(view.terms().getBalance()).isEqualTo(1234.56);
@@ -177,16 +184,25 @@ class TimeDepositPersistenceAdapterTest {
     @DisplayName("G4: deterministic order")
     class Ordering {
 
+        // Eight deposits; every second one is updated, which moves it to the end of the heap, and two of them get
+        // withdrawals, so neither heap order nor join order matches the internal key by accident.
         @Test
         void ordersDepositsByInternalKey() {
-            rows.insertDeposit(uuid("ffffffffffff"), "basic", 31, "3.00");
-            rows.insertDeposit(uuid("888888888888"), "basic", 31, "2.00");
-            rows.insertDeposit(uuid("000000000000"), "basic", 31, "1.00");
-            jdbc.sql("update \"timeDeposits\" set \"balance\" = 4.00 where \"publicId\" = ?")
-                    .param(uuid("ffffffffffff")).update();
+            List<UUID> expected = new ArrayList<>();
+            for (int i = 8; i >= 1; i--) {
+                UUID publicId = uuid("%012d".formatted(i));
+                int id = rows.insertDeposit(publicId, "basic", 31, "1.00");
+                expected.add(publicId);
+                if (i % 3 == 0) {
+                    rows.insertWithdrawal(id, "0.50", "2026-01-01");
+                }
+            }
+            for (int i = 8; i >= 1; i -= 2) {
+                jdbc.sql("update \"timeDeposits\" set \"balance\" = 2.00 where \"publicId\" = ?")
+                        .param(uuid("%012d".formatted(i))).update();
+            }
 
-            assertThat(adapter.loadAll()).extracting(TimeDepositView::id)
-                    .containsExactly(uuid("ffffffffffff"), uuid("888888888888"), uuid("000000000000"));
+            assertThat(adapter.loadAll()).extracting(TimeDepositView::id).containsExactlyElementsOf(expected);
         }
 
         @Test
@@ -203,6 +219,22 @@ class TimeDepositPersistenceAdapterTest {
                     .containsExactly(uuid("000000000903"), uuid("000000000901"), uuid("000000000904"),
                             uuid("000000000902"));
         }
+    }
+
+    // Any other load path (here: find plus lazy loading, as a later write adapter might) keeps the withdrawal order.
+    @Test
+    void ordersWithdrawalsWhenLoadedOutsideTheListQuery() {
+        int deposit = rows.insertDeposit("basic", 800, "100.00");
+        rows.insertWithdrawal(uuid("000000000904"), deposit, "1.00", "2026-03-01");
+        rows.insertWithdrawal(uuid("000000000903"), deposit, "1.00", "2026-01-15");
+        rows.insertWithdrawal(uuid("000000000902"), deposit, "1.00", "2026-03-01");
+        jdbc.sql("update \"withdrawals\" set \"amount\" = 2.00 where \"publicId\" = ?")
+                .param(uuid("000000000904")).update();
+
+        TimeDepositEntity entity = entityManager.find(TimeDepositEntity.class, deposit);
+
+        assertThat(entity.getWithdrawals()).extracting(WithdrawalEntity::getPublicId)
+                .containsExactly(uuid("000000000903"), uuid("000000000904"), uuid("000000000902"));
     }
 
     // The port promises a consistent snapshot; this adapter delivers it by reading everything in one statement.

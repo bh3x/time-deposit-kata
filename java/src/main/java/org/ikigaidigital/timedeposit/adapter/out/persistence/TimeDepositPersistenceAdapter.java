@@ -13,7 +13,8 @@ import java.util.Objects;
 /**
  * Reads time deposits for the list (ADR-0008, decision 4): one fetch-join statement, mapped to views around the
  * legacy {@link TimeDeposit}. The balance is read as {@code BigDecimal.doubleValue()}, the nearest double
- * (ADR-0006); rounding for the API happens in the REST adapter.
+ * (ADR-0006); rounding for the API happens in the REST adapter. A plain {@code @Component}: the Spring Data repository
+ * already translates persistence exceptions, and adapters declare no transactions (ADR-0008).
  */
 @Component
 class TimeDepositPersistenceAdapter implements LoadTimeDepositViewsPort {

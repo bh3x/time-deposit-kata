@@ -12,6 +12,7 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 
 import javax.sql.DataSource;
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -41,15 +42,23 @@ class TimeDepositApplicationContextTest {
         jdbc.sql("truncate \"withdrawals\", \"timeDeposits\", \"idempotencyKeys\" restart identity").update();
     }
 
+    // No test transaction here: the withdrawals must already be loaded when the use case returns (no lazy loading).
     @Test
-    void listsTimeDepositsFromTheDatabaseThroughTheUseCase() {
-        jdbc.sql("insert into \"timeDeposits\" (\"publicId\", \"planType\", \"days\", \"balance\") values (?, ?, ?, ?)")
-                .params(PUBLIC_ID, "basic", 31, new BigDecimal("1000.00"))
+    void listsTimeDepositsWithWithdrawalsFromTheDatabaseThroughTheUseCase() {
+        Integer id = jdbc.sql("""
+                        insert into "timeDeposits" ("publicId", "planType", "days", "balance")
+                        values (?, ?, ?, ?) returning "id"
+                        """)
+                .params(PUBLIC_ID, "basic", 400, new BigDecimal("1000.00"))
+                .query(Integer.class).single();
+        jdbc.sql("insert into \"withdrawals\" (\"timeDepositId\", \"amount\", \"date\") values (?, ?, ?)")
+                .params(id, new BigDecimal("100.00"), LocalDate.parse("2026-06-01"))
                 .update();
 
-        assertThat(listTimeDeposits.listAll())
-                .singleElement()
-                .extracting(TimeDepositView::id)
-                .isEqualTo(PUBLIC_ID);
+        TimeDepositView view = listTimeDeposits.listAll().getFirst();
+
+        assertThat(view.id()).isEqualTo(PUBLIC_ID);
+        assertThat(view.withdrawals()).singleElement()
+                .satisfies(w -> assertThat(w.amount()).isEqualByComparingTo("100.00"));
     }
 }
