@@ -10,4 +10,22 @@ servers:
     description: Relative to the host serving the API
 paths: {}
 components:
-  schemas: {}
+  schemas:
+    Problem:
+      type: object
+      description: RFC 9457 Problem Details (application/problem+json).
+      properties:
+        type:
+          type: string
+          format: uri-reference
+          default: about:blank
+        title:
+          type: string
+        status:
+          type: integer
+          format: int32
+        detail:
+          type: string
+        instance:
+          type: string
+          format: uri-reference
