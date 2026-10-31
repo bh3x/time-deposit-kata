@@ -68,6 +68,17 @@ class TimeDepositSchemaTest {
         assertThat(v1Succeeded).isTrue();
     }
 
+    // S7, other side: without the demo profile no seed is applied.
+    @Test
+    void appliesNoDemoSeedWithoutTheDemoProfile() {
+        Integer seedRuns = jdbc.sql("select count(*) from flyway_schema_history where script = 'R__demo_seed.sql'")
+                .query(Integer.class).single();
+        Integer deposits = jdbc.sql("select count(*) from \"timeDeposits\"").query(Integer.class).single();
+
+        assertThat(seedRuns).isZero();
+        assertThat(deposits).isZero();
+    }
+
     @Nested
     @DisplayName("S1: tables, columns and index with the brief's exact names")
     class Structure {

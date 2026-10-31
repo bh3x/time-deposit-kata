@@ -1,0 +1,4 @@
+# Demo profile (ADR-0006): adds the demo seed to the schema migrations. Never used by the tests' default profile.
+spring:
+  flyway:
+    locations: classpath:db/migration,classpath:db/seed
