@@ -33,7 +33,8 @@ Java 25, Spring Boot 4.1, Maven Wrapper (`./mvnw`), PostgreSQL, Flyway, contract
   - monthly interest = `balance * rate / 12`, computed as `double`
   - only the interest is rounded: `new BigDecimal(interest).setScale(2, HALF_UP)`, then added to the balance
 - Characterization tests must exist and pass **before** any refactoring of the calculator.
-- No additional endpoints beyond the two above.
+- No additional endpoints beyond the two above, and no other HTTP routes in the application (no springdoc,
+  actuator or reachable `/error`; Swagger UI runs as a separate container — ADR-0005).
 - Where requirements are ambiguous, make a logical assumption and justify it in a code comment.
 
 ## Architecture (hexagonal) — provisional
@@ -80,7 +81,8 @@ requires an ADR.
    - "breaking change": signature only vs. observable behaviour (treated as both)
    - "for any **existing** plans": all plans forever vs. only today's three — decide in the interest
      calculation ADR whether the 30-day rule is global or per policy
-   - "endpoint": API operation vs. any HTTP route (Swagger UI, actuator)
+   - "endpoint": API operation vs. any HTTP route (Swagger UI, actuator) — decided in ADR-0005: both readings
+     must hold, so the application serves no route beyond the two operations
 8. If the readings lead to different code, ask which one is meant, or implement the reading the legacy code
    supports and record the alternatives in a code comment at the point of use, and in an ADR when significant
    (rule 33).
