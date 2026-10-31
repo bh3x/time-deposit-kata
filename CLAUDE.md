@@ -34,7 +34,10 @@ Java 25, Spring Boot 4.1, Maven Wrapper (`./mvnw`), PostgreSQL, Flyway, contract
 - No additional endpoints beyond the two above.
 - Where requirements are ambiguous, make a logical assumption and justify it in a code comment.
 
-## Architecture (hexagonal)
+## Architecture (hexagonal) — provisional
+The layout below is a **working assumption** until the hexagonal architecture ADR in `docs/adr/` is accepted;
+this section will then be updated to match it. Until then, follow this layout as the default; any deviation
+requires an ADR.
 - `domain` – pure Java: entities, interest policies (Strategy + registry). No Spring/JPA imports.
 - `application` – use cases and ports (`port/in`, `port/out`). No web/persistence details.
 - `adapter/in/rest` – controllers implementing the generated OpenAPI interfaces.
@@ -58,6 +61,7 @@ Java 25, Spring Boot 4.1, Maven Wrapper (`./mvnw`), PostgreSQL, Flyway, contract
     PR descriptions end with `🤖 Generated with [Claude Code](https://claude.com/claude-code)`
   - push after each approved increment; one PR per increment into `main`; merge commit (no squash)
   - only remote is `origin`; never push or open PRs against the upstream `ikigai-digital` repository
+- Record significant decisions as ADRs following the process in `docs/adr/README.md`.
 - `AI_USAGE.md` stays **brief**, as the brief requires: tools and setup, how to reproduce it, and a short summary
   of which parts were AI-assisted and why. No transcripts, prompt logs or step-by-step usage details.
 
