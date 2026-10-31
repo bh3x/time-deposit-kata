@@ -8,3 +8,7 @@ __pycache__/
 .idea/
 package-lock.json
 .vscode/
+.claude/settings.local.json
+.env
+.env.*
+!.env.example

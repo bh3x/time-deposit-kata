@@ -1,0 +1,45 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git show:*)",
+      "Bash(git branch --show-current)",
+      "Bash(git branch -a)",
+      "Bash(git branch --list:*)",
+      "Bash(git branch -v:*)",
+      "Bash(./mvnw:*)"
+    ],
+    "ask": [
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(git checkout:*)",
+      "Bash(git switch:*)",
+      "Bash(git merge:*)",
+      "Bash(git rebase:*)",
+      "Bash(git reset:*)",
+      "Bash(gh pr:*)",
+      "Bash(docker compose:*)"
+    ],
+    "deny": [
+      "Bash(git push --force:*)",
+      "Bash(git push -f:*)",
+      "Bash(git push * --force*)",
+      "Bash(git push * -f*)",
+      "Bash(git push * +*)",
+      "Bash(rm -rf:*)",
+      "Bash(rm -fr:*)",
+      "Bash(rm -r *)",
+      "Bash(rm -R *)",
+      "Bash(rm -Rf:*)",
+      "Bash(rm -r*)",
+      "Bash(rm -R*)",
+      "Bash(rm --recursive*)",
+      "Bash(cat *.env*)",
+      "Read(**/.env)",
+      "Read(**/.env.*)"
+    ]
+  }
+}
