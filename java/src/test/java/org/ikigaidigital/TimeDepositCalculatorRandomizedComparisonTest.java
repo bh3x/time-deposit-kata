@@ -18,41 +18,50 @@ class TimeDepositCalculatorRandomizedComparisonTest {
     private static final int DEPOSITS = 10_000;
     private static final String[] PLAN_TYPES = {"basic", "student", "premium", "gold", "", "Basic", "PREMIUM", " student"};
     private static final int[] BOUNDARY_DAYS = {-1, 0, 29, 30, 31, 32, 44, 45, 46, 47, 364, 365, 366, 367};
-    // Whole cents below 10^13 (ADR-0006's column bound): 10^15 cents.
-    private static final long MAX_CENTS = 1_000_000_000_000_000L;
+    // Balances whose interest is an exact half-cent tie (0.125) or a near-tie for some plan.
+    private static final double[] BOUNDARY_BALANCES = {0.0, 0.01, 6.00, 18.00, 30.00, 50.00, 90.00, 150.00, -150.00};
+    // Whole cents below 10^13 (ADR-0006's column bound) are 10^15 cents.
+    private static final int MAX_CENT_DIGITS = 15;
 
     @Test
     void matchesFrozenLegacyCopyOnGeneratedDeposits() {
         Random random = new Random(SEED);
         List<TimeDeposit> actual = new ArrayList<>();
         List<TimeDeposit> expected = new ArrayList<>();
-        for (int id = 1; id <= DEPOSITS; id++) {
+        double[] inputBalances = new double[DEPOSITS];
+        for (int i = 0; i < DEPOSITS; i++) {
             String planType = PLAN_TYPES[random.nextInt(PLAN_TYPES.length)];
             int days = random.nextBoolean()
                     ? BOUNDARY_DAYS[random.nextInt(BOUNDARY_DAYS.length)]
                     : random.nextInt(1_000);
             double balance = randomBalance(random);
-            actual.add(new TimeDeposit(id, planType, balance, days));
-            expected.add(new TimeDeposit(id, planType, balance, days));
+            inputBalances[i] = balance;
+            actual.add(new TimeDeposit(i + 1, planType, balance, days));
+            expected.add(new TimeDeposit(i + 1, planType, balance, days));
         }
 
         new TimeDepositCalculator().updateBalance(actual);
         new FrozenLegacyTimeDepositCalculator().updateBalance(expected);
 
+        List<String> mismatches = new ArrayList<>();
         for (int i = 0; i < DEPOSITS; i++) {
             TimeDeposit a = actual.get(i);
             TimeDeposit e = expected.get(i);
-            assertThat(a.getBalance())
-                    .as("seed %d, deposit %d (%s, %d days)", SEED, a.getId(), a.getPlanType(), a.getDays())
-                    .isEqualTo(e.getBalance());
+            if (!a.getBalance().equals(e.getBalance())) {
+                mismatches.add("deposit %d (%s, %d days, balance %s): expected %s but was %s".formatted(
+                        a.getId(), a.getPlanType(), a.getDays(), inputBalances[i], e.getBalance(), a.getBalance()));
+            }
         }
+        assertThat(mismatches).as("mismatches against the frozen legacy copy (seed %d)", SEED).isEmpty();
     }
 
-    // Mostly realistic balances, plus small ones that hit the half-cent rounding edges more often.
+    // A quarter boundary balances; otherwise whole cents with a log-uniform magnitude from 1 cent to below 10^13,
+    // so small, realistic and very large balances are all frequent.
     private static double randomBalance(Random random) {
-        long cents = random.nextInt(4) == 0
-                ? random.nextLong(10_000)
-                : random.nextLong(MAX_CENTS);
-        return cents / 100.0;
+        if (random.nextInt(4) == 0) {
+            return BOUNDARY_BALANCES[random.nextInt(BOUNDARY_BALANCES.length)];
+        }
+        long bound = (long) Math.pow(10, 1 + random.nextInt(MAX_CENT_DIGITS));
+        return random.nextLong(bound) / 100.0;
     }
 }

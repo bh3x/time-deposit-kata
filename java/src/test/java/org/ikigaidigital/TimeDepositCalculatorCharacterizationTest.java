@@ -39,6 +39,7 @@ class TimeDepositCalculatorCharacterizationTest {
             assertThat(balanceAfterUpdate(planType, 1000.00, days)).isEqualTo(1000.00);
         }
 
+        // Deliberately overlaps with the plan classes: both sides of the gate in one place.
         @ParameterizedTest(name = "{0} at 31 days -> {1}")
         @CsvSource({"basic, 1000.83", "student, 1002.5"})
         void interestFromDay31(String planType, double expected) {
@@ -107,6 +108,19 @@ class TimeDepositCalculatorCharacterizationTest {
         void halfCentJustBelowRoundsDown() {
             // 18.00 * 0.01 / 12 is just below 0.015 as a double -> 0.01 (decimal HALF_UP would give 0.02)
             assertThat(balanceAfterUpdate("basic", 18.00, 31)).isEqualTo(18.01);
+        }
+
+        @ParameterizedTest(name = "{0} {1} at {2} days: interest exactly 0.125 -> {3}")
+        @CsvSource({"premium, 30.00, 46, 30.13", "student, 50.00, 31, 50.13", "basic, 150.00, 31, 150.13"})
+        void exactTieRoundsHalfUp(String planType, double balance, int days, double expected) {
+            // The interest is exactly 0.125 as a double: HALF_UP gives 0.13, HALF_EVEN or HALF_DOWN would give 0.12
+            assertThat(balanceAfterUpdate(planType, balance, days)).isEqualTo(expected);
+        }
+
+        @Test
+        void interestBelowHalfACentRoundsToZero() {
+            // 0.01 * 0.01 / 12 = 0.0000083.. -> 0.00
+            assertThat(balanceAfterUpdate("basic", 0.01, 31)).isEqualTo(0.01);
         }
 
         @Test
@@ -210,9 +224,10 @@ class TimeDepositCalculatorCharacterizationTest {
             assertThatNullPointerException().isThrownBy(() -> calculator.updateBalance(List.of(deposit)));
         }
 
+        // HALF_UP is symmetric around zero: -0.005.. -> -0.01, -0.0149.. -> -0.01, the exact tie -0.125 -> -0.13
         @ParameterizedTest(name = "basic {0} -> {1}")
-        @CsvSource({"-6.00, -6.01", "-18.00, -18.01"})
-        void negativeBalanceGetsNegativeInterestRoundedAwayFromZero(double balance, double expected) {
+        @CsvSource({"-6.00, -6.01", "-18.00, -18.01", "-150.00, -150.13"})
+        void negativeBalanceGetsNegativeInterestRoundedSymmetrically(double balance, double expected) {
             assertThat(balanceAfterUpdate("basic", balance, 31)).isEqualTo(expected);
         }
 
