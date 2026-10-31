@@ -1,11 +1,11 @@
 package org.ikigaidigital.architecture;
 
 import com.tngtech.archunit.core.domain.JavaModifier;
-import jakarta.persistence.Entity;
 import com.tngtech.archunit.core.importer.ImportOption;
 import com.tngtech.archunit.junit.AnalyzeClasses;
 import com.tngtech.archunit.junit.ArchTest;
 import com.tngtech.archunit.lang.ArchRule;
+import jakarta.persistence.Entity;
 import org.ikigaidigital.TimeDeposit;
 import org.ikigaidigital.TimeDepositCalculator;
 import org.ikigaidigital.shared.application.UseCase;
@@ -120,23 +120,26 @@ class TimeDepositCapabilityArchitectureTest {
             .should().dependOnClassesThat()
             .resideInAnyPackage("jakarta.persistence..", "org.springframework.data..", "org.hibernate..");
 
+    // Implied by the rule above (annotations are dependencies); kept for its clearer failure message.
     @ArchTest
     static final ArchRule entitiesOnlyInPersistenceAdapters = classes()
             .that().areAnnotatedWith(Entity.class)
             .should().resideInAPackage("..adapter.out.persistence..");
 
-    // Rule 1, stricter for driven adapters: within the project they use only driven ports, the read model, the
-    // domain and the kernel — never use cases, services or other adapters.
+    // Rule 1, stricter for the persistence adapter: within the project it uses only driven ports, the read model, the
+    // domain, the kernel and shared technical code — never use cases, services or other adapters (shared.adapter.in
+    // is excluded by the rule below).
     @ArchTest
-    static final ArchRule drivenAdaptersUseOnlyPortsModelsAndDomain = classes()
-            .that().resideInAPackage("org.ikigaidigital.timedeposit.adapter.out..")
+    static final ArchRule persistenceAdapterUsesOnlyPortsModelsAndDomain = classes()
+            .that().resideInAPackage("org.ikigaidigital.timedeposit.adapter.out.persistence..")
             .should().onlyDependOnClassesThat(
                     not(resideInAPackage("org.ikigaidigital.."))
                             .or(resideInAnyPackage(
-                                    "org.ikigaidigital.timedeposit.adapter.out..",
+                                    "org.ikigaidigital.timedeposit.adapter.out.persistence..",
                                     "org.ikigaidigital.timedeposit.application.port.out..",
                                     "org.ikigaidigital.timedeposit.application.model..",
-                                    "org.ikigaidigital.timedeposit.domain.."))
+                                    "org.ikigaidigital.timedeposit.domain..",
+                                    "org.ikigaidigital.shared.."))
                             .or(belongToAnyOf(TimeDeposit.class, TimeDepositCalculator.class)));
 
     @ArchTest
