@@ -117,6 +117,14 @@ class TimeDepositCalculatorCharacterizationTest {
             assertThat(balanceAfterUpdate(planType, balance, days)).isEqualTo(expected);
         }
 
+        @ParameterizedTest(name = "{0} {1} at {2} days -> {3}")
+        @CsvSource({"student, 10.00, 31, 10.02", "premium, 3.60, 46, 3.62"})
+        void nearTiesDependOnTheArithmeticOrder(String planType, double balance, int days, double expected) {
+            // balance * rate / 12 lands just below / just above the half cent; balance * (rate / 12) would round
+            // the other way (10.03 / 3.61), so these pin the legacy order of operations for student and premium
+            assertThat(balanceAfterUpdate(planType, balance, days)).isEqualTo(expected);
+        }
+
         @Test
         void interestBelowHalfACentRoundsToZero() {
             // 0.01 * 0.01 / 12 = 0.0000083.. -> 0.00

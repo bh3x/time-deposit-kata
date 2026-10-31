@@ -19,7 +19,7 @@ class TimeDepositCalculatorRandomizedComparisonTest {
     private static final String[] PLAN_TYPES = {"basic", "student", "premium", "gold", "", "Basic", "PREMIUM", " student"};
     private static final int[] BOUNDARY_DAYS = {-1, 0, 29, 30, 31, 32, 44, 45, 46, 47, 364, 365, 366, 367};
     // Balances whose interest is an exact half-cent tie (0.125) or a near-tie for some plan.
-    private static final double[] BOUNDARY_BALANCES = {0.0, 0.01, 6.00, 18.00, 30.00, 50.00, 90.00, 150.00, -150.00};
+    private static final double[] BOUNDARY_BALANCES = {0.0, 0.01, 3.60, 6.00, 10.00, 18.00, 30.00, 50.00, 90.00, 150.00, -150.00};
     // Whole cents below 10^13 (ADR-0006's column bound) are 10^15 cents.
     private static final int MAX_CENT_DIGITS = 15;
 
