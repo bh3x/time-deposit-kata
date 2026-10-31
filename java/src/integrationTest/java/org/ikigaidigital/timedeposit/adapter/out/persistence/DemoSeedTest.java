@@ -65,6 +65,16 @@ class DemoSeedTest {
         assertThat(matches).as(description).isPositive();
     }
 
+    // Exact counts and per-deposit withdrawals: a typo in a withdrawal's deposit id would silently drop the row.
+    @Test
+    void containsExactlyTheListedRows() {
+        assertThat(count("timeDeposits")).isEqualTo(15);
+        assertThat(count("withdrawals")).isEqualTo(6);
+        assertThat(withdrawalsOf("00000000-0000-4000-8000-000000000005")).isEqualTo(3);
+        assertThat(withdrawalsOf("00000000-0000-4000-8000-000000000006")).isEqualTo(1);
+        assertThat(withdrawalsOf("00000000-0000-4000-8000-000000000013")).isEqualTo(2);
+    }
+
     @Test
     void isAppliedAsARepeatableMigrationFromItsOwnLocation() {
         Boolean succeeded = jdbc.sql("""
@@ -74,6 +84,7 @@ class DemoSeedTest {
                 .query(Boolean.class).optional().orElse(false);
 
         assertThat(succeeded).isTrue();
+        assertThat(new ClassPathResource("db/migration/R__demo_seed.sql").exists()).isFalse();
     }
 
     // Repeatable migrations re-run when their checksum changes, so the seed must not duplicate rows.
@@ -91,6 +102,14 @@ class DemoSeedTest {
 
         assertThat(count("timeDeposits")).isEqualTo(deposits);
         assertThat(count("withdrawals")).isEqualTo(withdrawals);
+    }
+
+    private int withdrawalsOf(String depositPublicId) {
+        return jdbc.sql("""
+                        select count(*) from "withdrawals" w join "timeDeposits" d on d."id" = w."timeDepositId"
+                        where d."publicId" = ?::uuid
+                        """)
+                .param(depositPublicId).query(Integer.class).single();
     }
 
     private int count(String table) {

@@ -1,7 +1,11 @@
 -- Demo data per ADR-0006, applied only with the demo profile. A repeatable migration runs after the versioned schema
 -- migrations and again whenever this file changes, so every insert is idempotent: fixed public ids and
--- ON CONFLICT ("publicId") DO NOTHING. Withdrawals find their deposit by public id, never by the generated key.
--- Balances are current balances, already net of past withdrawals (ADR-0004).
+-- ON CONFLICT ("publicId") DO NOTHING. DO NOTHING also means an edited row never reaches an already seeded database
+-- (balances there may have been updated by balance update runs); a changed case needs a new public id.
+-- Withdrawals find their deposit by public id, never by the generated key.
+-- Balances are current balances, already net of past withdrawals (ADR-0004). Withdrawal dates are illustrative:
+-- "days" has no reference date (ADR-0004), so they are placed on long-running deposits, within the deposit's age
+-- counted back from 2026-10-31.
 
 insert into "timeDeposits" ("publicId", "planType", "days", "balance") values
     ('00000000-0000-4000-8000-000000000001', 'basic',   30,  1000.00),       -- basic: last day without interest
@@ -21,18 +25,21 @@ insert into "timeDeposits" ("publicId", "planType", "days", "balance") values
     ('00000000-0000-4000-8000-000000000015', 'basic',   31,  18.00)          -- interest 0.0149.. rounds down to 0.01
 on conflict ("publicId") do nothing;
 
+-- Ordered by public id, so the generated internal keys follow the listed order (the list orders withdrawals by date,
+-- then internal key).
 insert into "withdrawals" ("publicId", "timeDepositId", "amount", "date")
 select w."publicId"::uuid, d."id", w."amount"::numeric, w."date"::date
 from (values
-    -- deposit 2: several withdrawals
-    ('00000000-0000-4000-8000-000000000101', '00000000-0000-4000-8000-000000000002', '100.00', '2026-08-01'),
-    ('00000000-0000-4000-8000-000000000102', '00000000-0000-4000-8000-000000000002', '50.00',  '2026-09-15'),
-    -- deposit 4: one withdrawal
-    ('00000000-0000-4000-8000-000000000103', '00000000-0000-4000-8000-000000000004', '25.00',  '2026-07-10'),
-    -- deposit 8: several withdrawals, two on the same date (ordering by date, then key)
-    ('00000000-0000-4000-8000-000000000104', '00000000-0000-4000-8000-000000000008', '500.00', '2026-03-01'),
-    ('00000000-0000-4000-8000-000000000105', '00000000-0000-4000-8000-000000000008', '250.00', '2026-03-01'),
-    ('00000000-0000-4000-8000-000000000106', '00000000-0000-4000-8000-000000000008', '125.50', '2026-05-20')
+    -- deposit 5 (365 days): several withdrawals, two on the same date
+    ('00000000-0000-4000-8000-000000000101', '00000000-0000-4000-8000-000000000005', '500.00', '2026-03-01'),
+    ('00000000-0000-4000-8000-000000000102', '00000000-0000-4000-8000-000000000005', '250.00', '2026-03-01'),
+    ('00000000-0000-4000-8000-000000000103', '00000000-0000-4000-8000-000000000005', '125.50', '2026-05-20'),
+    -- deposit 6 (366 days): one withdrawal
+    ('00000000-0000-4000-8000-000000000104', '00000000-0000-4000-8000-000000000006', '25.00',  '2026-02-10'),
+    -- deposit 13 (400 days): several withdrawals
+    ('00000000-0000-4000-8000-000000000105', '00000000-0000-4000-8000-000000000013', '100.00', '2026-01-15'),
+    ('00000000-0000-4000-8000-000000000106', '00000000-0000-4000-8000-000000000013', '50.00',  '2026-06-01')
 ) as w ("publicId", "depositPublicId", "amount", "date")
 join "timeDeposits" d on d."publicId" = w."depositPublicId"::uuid
+order by w."publicId"
 on conflict ("publicId") do nothing;
