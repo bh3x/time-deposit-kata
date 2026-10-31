@@ -7,8 +7,8 @@
 The brief prefers "Hexagonal Architecture" and requires extensibility ("accommodate future complexities"). Until
 now `CLAUDE.md` held a provisional layout. This ADR fixes the structure of the Java solution: packages, ports,
 wiring, transactions, persistence technology and how the boundaries are enforced. Runtime consistency of the
-balance update (locking, idempotency flow, overflow) is decided separately in ADR-0009; the interest policies in
-the planned *Interest calculation design* ADR.
+balance update (locking, idempotency flow, overflow) is decided in the planned *Balance update consistency* ADR;
+the interest policies in the planned *Interest calculation design* ADR.
 
 **Decision drivers**
 1. **Extensibility:** options are judged by how they hold up when capabilities are added later (e.g. a single

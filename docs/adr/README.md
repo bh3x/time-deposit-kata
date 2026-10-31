@@ -26,3 +26,4 @@ An ADR captures one significant decision: its context, the options considered, t
 ## Planned decisions
 Numbers are assigned when each ADR is written.
 - Interest calculation design
+- Balance update consistency (concurrent runs and writers, idempotency flow, overflow, scale)
