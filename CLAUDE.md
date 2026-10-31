@@ -12,10 +12,13 @@ The solution is implemented in **Java** inside `java/`. The other language folde
   still to be designed; `openapi.yaml` becomes the source of truth once agreed):
   - list all time deposits (`id`, `planType`, `balance`, `days`, `withdrawals`) — e.g. `GET /time-deposits`
   - update the balances of all stored time deposits via `updateBalance` — e.g. `POST /time-deposits/balances`
+- `TimeDeposit` has no withdrawals: the list response is built from a separate model/read path, never by changing
+  `TimeDeposit`.
+- The README must explain how to trigger both endpoints using the Swagger contract.
 - PostgreSQL persistence with tables `timeDeposits` and `withdrawals`
 - Interest logic that is extensible to new plan types, without changing existing behaviour
 
-## Stack
+## Target stack
 Java 25, Spring Boot 4.1, Maven Wrapper (`./mvnw`), PostgreSQL, Flyway, contract-first OpenAPI
 (`openapi.yaml` + openapi-generator), JUnit 5 + AssertJ, Testcontainers, Docker Compose.
 
@@ -24,6 +27,7 @@ Java 25, Spring Boot 4.1, Maven Wrapper (`./mvnw`), PostgreSQL, Flyway, contract
 - `TimeDepositCalculator.updateBalance(List<TimeDeposit>)`: signature unchanged and behaviour identical, including:
   - no interest when `days <= 30`
   - basic 1%, student 3% (only while `days < 366`), premium 5% (only when `days > 45`), unknown plan 0%
+  - plan types are matched as exact, case-sensitive lowercase strings: `basic`, `student`, `premium`
   - monthly interest = `balance * rate / 12`, computed as `double`
   - only the interest is rounded: `new BigDecimal(interest).setScale(2, HALF_UP)`, then added to the balance
 - Characterization tests must exist and pass **before** any refactoring of the calculator.
