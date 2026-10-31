@@ -18,6 +18,11 @@ dependencies {
     implementation(platform(libs.spring.boot.dependencies))
     // Stereotype annotations for @UseCase (ADR-0008); the application layer may use nothing else from Spring.
     implementation(libs.spring.context)
+    // Persistence (ADR-0006, ADR-0008): JPA for the adapters, Flyway for the schema, PostgreSQL as the database.
+    implementation(libs.spring.boot.starter.data.jpa)
+    implementation(libs.spring.boot.starter.flyway)
+    implementation(libs.flyway.database.postgresql)
+    runtimeOnly(libs.postgresql)
 }
 
 tasks.withType<JavaCompile>().configureEach {
@@ -37,13 +42,16 @@ testing {
             }
         }
 
-        // Integration tests (Testcontainers is added with the persistence step).
+        // Integration tests on real PostgreSQL via Testcontainers (ADR-0009).
         register<JvmTestSuite>("integrationTest") {
             useJUnitJupiter()
             dependencies {
                 implementation(project())
                 implementation(platform(libs.spring.boot.dependencies))
                 implementation(libs.assertj.core)
+                implementation(libs.spring.boot.starter.data.jpa.test)
+                implementation(libs.spring.boot.testcontainers)
+                implementation(libs.testcontainers.postgresql)
             }
             targets {
                 all {
@@ -55,6 +63,10 @@ testing {
         }
     }
 }
+
+// The integration tests see the main code's dependencies (Spring, JPA, the driver), not only its API.
+configurations["integrationTestImplementation"].extendsFrom(configurations.implementation.get())
+configurations["integrationTestRuntimeOnly"].extendsFrom(configurations.runtimeOnly.get())
 
 tasks.named("check") {
     dependsOn(testing.suites.named("integrationTest"))
