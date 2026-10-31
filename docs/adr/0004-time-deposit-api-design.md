@@ -34,8 +34,31 @@ with currency.
 - **planType:** string with `x-extensible-enum` (`basic`, `student`, `premium`); case-sensitive.
 - `days` is a non-negative integer.
 
+### Endpoint: list time deposits
+- `GET /time-deposits` (relative to `/api/v1`), operationId `listTimeDeposits`, tag `TimeDeposits`
+  (generates `TimeDepositsApi.listTimeDeposits()`).
+- Path uses the plural resource name in kebab-case.
+- Responses: `200` with `TimeDeposits` (empty array if none); `500` with Problem Details. No other errors apply:
+  the operation takes no input and requires no authentication. The Redocly `operation-4xx-response` warning is
+  therefore accepted.
+- **No authentication:** not required by the brief; declared explicitly with a top-level `security: []`, so adding
+  authentication later is a deliberate contract change.
+
 ### Balance Update
 _To be designed._
+
+## Future extensions (not part of this contract)
+The brief allows exactly two endpoints, so the following is recorded for later only — not specified in
+`openapi.yaml` and not implemented.
+
+### Get a single time deposit
+- `GET /time-deposits/{id}`, operationId `getTimeDeposit`, tag `TimeDeposits`.
+- Path parameter `id`: the public UUID (`format: uuid`) — never the internal key.
+- Responses: `200` with `TimeDeposit` (same representation as a list item, including withdrawals);
+  `400` Problem Details for a malformed UUID; `404` Problem Details if no time deposit has that id;
+  `500` Problem Details.
+- Fits the current design without changes: the `TimeDeposit` schema is reused, and random UUIDs make
+  item URLs non-enumerable.
 
 ## Consequences
 - The data model needs a unique public UUID per time deposit and withdrawal (data model ADR).

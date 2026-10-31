@@ -3,12 +3,35 @@ info:
   title: XA Bank Time Deposit API
   version: 1.0.0
   description: >
-    Contract-first API for XA Bank time deposits.
-    Endpoints are defined in a later increment (see docs/adr).
+    Contract-first API for XA Bank time deposits. Design decisions are recorded in docs/adr.
 servers:
   - url: /api/v1
     description: Relative to the host serving the API
-paths: {}
+security: []  # no authentication: not required by the brief (see ADR-0004)
+tags:
+  - name: TimeDeposits
+    description: Time deposits and their balances
+paths:
+  /time-deposits:
+    get:
+      operationId: listTimeDeposits
+      tags: [TimeDeposits]
+      summary: List all time deposits
+      description: >
+        Returns all time deposits with their withdrawals. The order is not guaranteed.
+      responses:
+        '200':
+          description: All time deposits (empty array if none).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TimeDeposits'
+        '500':
+          description: Unexpected server error.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
 components:
   schemas:
     TimeDeposits:
