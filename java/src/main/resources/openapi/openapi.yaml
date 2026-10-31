@@ -26,12 +26,22 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/TimeDeposits'
+              example:
+                - id: 3f2a6c1e-8b7d-4e2a-9c41-7d5e0b6a9f12
+                  planType: premium
+                  balance: '25000.00'
+                  days: 120
+                  withdrawals:
+                    - id: 9b1d4c7a-2e3f-4a5b-8c6d-0e1f2a3b4c5d
+                      amount: '500.00'
+                      date: '2026-09-15'
+                - id: 7c9e2b4d-1a3f-4e5b-8d6c-2f1e0a9b8c7d
+                  planType: basic
+                  balance: '10000.00'
+                  days: 45
+                  withdrawals: []
         '500':
-          description: Unexpected server error.
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/Problem'
+          $ref: '#/components/responses/InternalServerError'
   /balance-updates:
     post:
       operationId: createBalanceUpdate
@@ -45,32 +55,61 @@ paths:
           in: header
           required: false
           description: >
-            Client-generated unique key. A repeated request with the same key returns the original
-            outcome without applying interest again.
+            Client-generated unique key (1-255 characters). A repeated request with the same key returns the
+            original outcome (same status and body, including the original executedAt) without applying interest
+            again. A request that failed is not stored, so retrying it with the same key runs the update.
+            Keys are retained for 24 hours.
           schema:
             type: string
+            minLength: 1
             maxLength: 255
           example: 6c5f1d2e-4a8b-4c3d-9e7f-1a2b3c4d5e6f
       responses:
         '200':
-          description: Balances updated.
+          description: Balances updated (or the original outcome replayed for a reused Idempotency-Key).
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/BalanceUpdate'
+              example:
+                processedCount: 5
+                executedAt: '2026-10-31T10:15:00Z'
         '400':
-          description: Malformed Idempotency-Key.
+          description: Malformed Idempotency-Key (empty or longer than 255 characters).
           content:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/Problem'
+              example:
+                type: about:blank
+                title: Bad Request
+                status: 400
+                detail: Idempotency-Key must be 1 to 255 characters long.
+        '409':
+          description: A request with the same Idempotency-Key is still in progress; retry later.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              example:
+                type: about:blank
+                title: Conflict
+                status: 409
+                detail: A request with this Idempotency-Key is still being processed.
         '500':
-          description: Unexpected server error.
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/Problem'
+          $ref: '#/components/responses/InternalServerError'
 components:
+  responses:
+    InternalServerError:
+      description: Unexpected server error.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+          example:
+            type: about:blank
+            title: Internal Server Error
+            status: 500
   schemas:
     TimeDeposits:
       type: array
@@ -90,7 +129,9 @@ components:
           example: 3f2a6c1e-8b7d-4e2a-9c41-7d5e0b6a9f12
         planType:
           type: string
-          description: Plan of the time deposit; case-sensitive. New plan types may be added.
+          description: >
+            Plan of the time deposit; case-sensitive. Known values: `basic`, `student`, `premium`.
+            New plan types may be added.
           x-extensible-enum: [basic, student, premium]
           example: premium
         balance:
@@ -129,27 +170,31 @@ components:
         date:
           type: string
           format: date
+          description: Date of the withdrawal.
           example: '2026-09-15'
     BalanceUpdate:
       type: object
       description: Outcome of one balance update run (monthly interest applied to all time deposits).
-      required: [updatedCount, executedAt]
+      required: [processedCount, executedAt]
       properties:
-        updatedCount:
+        processedCount:
           type: integer
           format: int32
           minimum: 0
-          description: Number of time deposits processed.
+          description: >
+            Number of time deposits processed, including those whose balance did not change
+            (e.g. no interest in the first 30 days).
           example: 5
         executedAt:
           type: string
           format: date-time
-          description: When the update was executed (UTC).
+          description: When the update was executed, in UTC (RFC 3339 with `Z`).
           example: '2026-10-31T10:15:00Z'
     Amount:
       type: string
-      pattern: '^-?\d+\.\d{2}$'
-      description: Monetary amount as a decimal string with exactly two fraction digits (single currency).
+      pattern: '^\d+\.\d{2}$'
+      description: >
+        Non-negative monetary amount as a decimal string with exactly two fraction digits (single currency).
       example: '10000.00'
     Problem:
       type: object

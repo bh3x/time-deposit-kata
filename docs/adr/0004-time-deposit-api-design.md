@@ -30,8 +30,12 @@ with currency.
   (required by the brief and the legacy `TimeDeposit` class) and the `timeDepositId` foreign key are never exposed.
   Mapping rule: API `id` ↔ DB `publicId`.
 - **Money:** decimal **string** with exactly two fraction digits (e.g. `"10000.00"`), as common in banking APIs;
-  no binary floating point on the wire. **Single currency** assumed — the brief defines none.
-- **planType:** string with `x-extensible-enum` (`basic`, `student`, `premium`); case-sensitive.
+  no binary floating point on the wire. **Single currency** assumed — the brief defines none. Amounts are
+  **non-negative** (a balance or withdrawal is never below zero). Conversion from the legacy `Double`:
+  `BigDecimal.valueOf(d).setScale(2, RoundingMode.HALF_UP)` — the rounding mode the legacy calculator uses for
+  interest — applied when persisting and when producing the representation.
+- **planType:** string with `x-extensible-enum` (`basic`, `student`, `premium`); case-sensitive. The known values
+  are also listed in the description, as Swagger UI does not display the extension.
 - `days` is a non-negative integer.
 - **Balance and withdrawals:** `balance` is the current balance, already net of past withdrawals; withdrawals are
   a history record. Assumption — the brief does not relate them, and the interest calculation ignores withdrawals.
@@ -58,11 +62,18 @@ incremented, withdrawals are not involved).
   `TimeDeposits`. Top-level rather than `/time-deposits/balance-updates`: the run is not contained in the time
   deposits (it acts on them), and nesting would collide with a future `/time-deposits/{id}`.
 - **Synchronous:** the response is returned after all balances are stored.
-- **Response:** `200 OK` with a `BalanceUpdate` summary (`updatedCount`, `executedAt`). Not `201 Created`: runs
-  are not retrievable, so there is no `Location` to point to.
-- **Idempotency:** optional `Idempotency-Key` header. A repeated request with the same key returns the original
-  outcome without applying interest again; without a key, each call applies interest again (documented).
-  `400` Problem Details for a malformed key; `500` for unexpected errors.
+- **Response:** `200 OK` with a `BalanceUpdate` summary: `processedCount` (all deposits processed, including those
+  whose balance did not change) and `executedAt` (UTC). Not `201 Created`: runs are not retrievable, so there is
+  no `Location` to point to.
+- **Idempotency:** optional `Idempotency-Key` header (1–255 characters). Without a key, each call applies interest
+  again (documented). With a key:
+  - a repeated request returns the original outcome (same status and body, original `executedAt`) without
+    applying interest again;
+  - a request with the same key that is still in progress gets `409 Conflict` (as in the IETF Idempotency-Key
+    draft); the client retries later;
+  - a failed request stores nothing, so a retry with the same key runs the update;
+  - keys are retained for 24 hours.
+- Errors: `400` Problem Details for a malformed key, `409` as above, `500` for unexpected errors.
 
 ## Future extensions (not part of this contract)
 The brief allows exactly two endpoints, so the following is recorded for later only — not specified in
@@ -83,13 +94,15 @@ The brief stores and returns withdrawals but defines no way to create them. Cand
 - **Asynchronous event** from another system (e.g. core banking) — message consumer, duplicate handling.
 - **Scheduled/batch import** — interacts with the timing of balance updates.
 
-The read representation is the same in every case. For this exercise, sample withdrawals are seeded
-(see the data model ADR).
+The read representation is the same in every case. How sample withdrawals are loaded for this exercise is
+decided in the planned *Data model* ADR.
 
 ## Consequences
-- The data model needs a unique public UUID per time deposit and withdrawal (data model ADR).
-- The REST adapter converts the legacy `Double` balance to a 2-decimal string; the domain is unchanged.
+- The planned *Data model* ADR needs a unique public UUID per time deposit and withdrawal, and storage for
+  idempotency keys with their outcomes (24-hour retention).
+- The REST adapter converts the legacy `Double` balance to a 2-decimal string using the rounding rule above;
+  the domain is unchanged.
+- The planned *Hexagonal architecture* ADR must keep the idempotency key check and the balance update in one
+  transaction, and detect in-flight requests for the `409` response.
 - Adding a currency later is a deliberate, versioned change.
 - Tests must not rely on collection order.
-- Idempotency keys and their outcomes must be stored (data model ADR); key check and balance update run in one
-  transaction (architecture ADR).
