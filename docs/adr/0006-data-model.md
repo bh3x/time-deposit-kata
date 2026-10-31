@@ -24,18 +24,24 @@ Readings decided here:
 
 ## Options considered
 - **Naming:** quoted camelCase (`"timeDeposits"`, exactly the brief's names) · snake_case (`time_deposits`,
-  PostgreSQL convention, no quoting) · unquoted camelCase (written `timeDeposits`, stored as `timedeposits`
-  because PostgreSQL folds unquoted identifiers to lower case).
-- **Money columns:** `NUMERIC(19,2)` · `NUMERIC` without scale (stores the legacy `Double` exactly, float noise
-  included) · `DOUBLE PRECISION` (lossless with `Double`, but binary floating point, not the brief's Decimal).
-- **Primary keys:** `INTEGER` identity · `BIGINT` identity (needs narrowing into `TimeDeposit`'s `int id`).
-- **Constraints:** value ranges without a `planType` list · `NOT NULL` only · value ranges plus a `planType` list.
-- **Withdrawal foreign key on delete:** `RESTRICT` · `CASCADE`.
-- **publicId generation:** database default · application-generated.
+  PostgreSQL convention, no quoting, but not the brief's names) · unquoted camelCase (written `timeDeposits`,
+  stored as `timedeposits` because PostgreSQL folds unquoted identifiers to lower case — misleading).
+- **Money columns:** scaled `NUMERIC` · `NUMERIC` without scale (stores the legacy `Double` exactly, float noise
+  included, and the noise accumulates in the database) · `DOUBLE PRECISION` (lossless with `Double`, but binary
+  floating point, not the brief's Decimal).
+- **Primary keys:** `INTEGER` identity · `BIGINT` identity (needs narrowing into `TimeDeposit`'s `int id`, with an
+  overflow risk, and is not the brief's Integer).
+- **Constraints:** value ranges without a `planType` list · `NOT NULL` only (invalid values would depend on the
+  application alone) · value ranges plus a `planType` list (rejects plans the legacy code handles).
+- **Withdrawal foreign key on delete:** `RESTRICT` · `CASCADE` (silently deletes withdrawal history).
+- **publicId generation:** database default · application-generated (every writer, including seed scripts, must
+  remember to supply it).
 - **Idempotency storage:** typed table with the balance update's outcome · generic HTTP snapshot (status + JSON
-  body) · log of all balance update runs with a nullable unique key.
-- **Seed data:** separate Flyway location under a `demo` profile · always, as a schema migration · Java runner
-  under a `demo` profile.
+  body; reusable, but puts the HTTP representation into persistence) · log of all balance update runs with a
+  nullable unique key (an audit trail beyond the brief, with more complex retention).
+- **Seed data:** separate Flyway location under a `demo` profile · always, as a schema migration (demo rows in
+  every environment and in the schema history) · Java runner under a `demo` profile (code that duplicates
+  migration tooling).
 
 ## Decision
 ```mermaid
@@ -44,7 +50,7 @@ erDiagram
     timeDeposits {
         INTEGER id PK
         UUID publicId UK
-        VARCHAR planType
+        TEXT planType
         INTEGER days
         NUMERIC balance
     }
@@ -68,30 +74,40 @@ erDiagram
 ### Naming
 **Quoted camelCase**, exactly the brief's names: `"timeDeposits"`, `"planType"`, `"timeDepositId"`; the added
 table and columns follow the same convention (`"publicId"`, `"idempotencyKeys"`). A reviewer finds the tables and
-columns as specified. Every SQL statement and JPA mapping must quote them; the persistence step states the names
-explicitly in the mapping instead of relying on Spring Boot's default naming strategy (which would produce
-snake_case), and verifies the Hibernate quoting mechanism.
+columns as specified. Every SQL statement and JPA mapping must quote them. The mapping states every name
+explicitly; Spring Boot's default physical naming strategy may still rewrite explicit names to snake_case, so the
+persistence step is expected to configure `PhysicalNamingStrategyStandardImpl` (unverified; checked there together
+with the Hibernate quoting mechanism).
 
 ### Types
 - **Primary keys:** `INTEGER GENERATED ALWAYS AS IDENTITY` — the brief's Integer and `TimeDeposit`'s `int id`
   without narrowing. Seed rows do not hard-code ids; withdrawals reference their deposit through its fixed
   `publicId`.
-- **`publicId`:** `UUID NOT NULL UNIQUE DEFAULT gen_random_uuid()` on both tables (built into PostgreSQL 13 and
-  later; to be verified in the persistence step). Any writer gets a UUID without application code; seed rows may
-  set fixed UUIDs.
-- **`balance`, `amount`:** `NUMERIC(19,2)`, money at cent precision.
+- **`publicId`:** `UUID NOT NULL UNIQUE DEFAULT gen_random_uuid()` on both tables — a random (version 4) UUID as
+  ADR-0004 requires, built into PostgreSQL 13 and later (to be verified in the persistence step). Any writer gets
+  a UUID without application code; seed rows may set fixed UUIDs; the adapter reads the generated value back after
+  an insert.
+- **`balance`, `amount`:** `NUMERIC(15,2)` — cent precision, maximum `9,999,999,999,999.99`. The precision
+  enforces the bound the balance mapping relies on (below 10^13).
 - **`days`:** `INTEGER`; the age as stored, never advanced (ADR-0004).
-- **`planType`:** `VARCHAR(50)`; free text (see Constraints).
+- **`planType`:** `TEXT`; free text without a length limit, so any value the legacy code accepts can be stored
+  (see Constraints).
 - **`date`:** `DATE`, a calendar date without time zone.
 
-### Balance mapping (`Double` ↔ `NUMERIC(19,2)`)
+### Balance mapping (`Double` ↔ `NUMERIC(15,2)`)
 - **Read:** `BigDecimal.doubleValue()` into `TimeDeposit`.
 - **Write:** `BigDecimal.valueOf(balance).setScale(2, RoundingMode.HALF_UP)`.
-- **Why this is not a change of the legacy result:** the stored balance has 2 decimals and `updateBalance` adds an
+- **Why this does not change the legacy result:** the stored balance has 2 decimals and `updateBalance` adds an
   interest rounded to 2 decimals, so the exact decimal sum has 2 decimals. The `Double` addition can add float
-  noise (e.g. `1000.9300000000001`); for balances below 10^13 that error is far below 0.005, so rounding to scale 2
-  recovers the exact sum. Assumption: balances stay below 10^13 (a `Double` cannot hold cent precision much
-  beyond that anyway). The rounding mode is the one the legacy calculator uses for interest.
+  noise (`1000.10 + 0.83` gives `1000.9300000000001`). Below 2^44 (about 1.76 × 10^13) one unit in the last place
+  is at most 2^-9; reading the stored value, the interest, the addition and `BigDecimal.valueOf` together stay
+  below 0.005 (about 0.004 in the worst case), so rounding to scale 2 recovers the exact sum. `BigDecimal.valueOf`
+  relies on `Double.toString` returning the shortest decimal that maps back to the same `Double` (specified since
+  JDK 19; unverified, Java 25 is used). Because the error stays below half a cent, the rounding mode does not
+  affect the result; `HALF_UP` is chosen for consistency with the legacy calculator.
+- **Baseline:** the equivalence holds **per call**, given the balance as stored. Float noise from an earlier call
+  is deliberately not carried into the next one, as an in-memory chain of legacy calls would; at a half-cent edge
+  the two could round differently. Legacy has no persistence, so this is not a regression.
 
 ### Constraints
 - All brief-required columns are `NOT NULL`.
@@ -111,30 +127,49 @@ Table `"idempotencyKeys"`, only for requests that send an `Idempotency-Key` (ADR
 - `createdAt TIMESTAMPTZ NOT NULL`, `completedAt TIMESTAMPTZ`;
 - `CHECK`: a `COMPLETED` row has `processedCount`, `executedAt` and `completedAt`.
 
-It stores the domain outcome, not an HTTP response; the REST adapter re-renders the same status and body from it.
-No request fingerprint: the operation takes no body, so the same key cannot carry a different request. A failed
-request deletes its row ("stores nothing"). In-flight detection for `409` (e.g. a timeout derived from
-`createdAt`), serialised runs and removal after 24 hours from `completedAt` are decided in the planned *Hexagonal
-architecture* ADR.
+Rules for using the table:
+- It stores the domain outcome, not an HTTP response; the REST adapter re-renders the same status and body from it.
+- **Same transaction:** the switch to `COMPLETED` (with `processedCount`, `executedAt`, `completedAt`) is written
+  in the same transaction as the balance updates. A crash then leaves either both or neither; otherwise a retry
+  could apply interest twice.
+- **Failure:** a failed request deletes its row ("stores nothing"). A row left `IN_PROGRESS` by a crash is stale
+  once the in-flight timeout (derived from `createdAt`) has passed; it is then taken over or removed, never kept
+  forever.
+- **Replay:** `executedAt` is truncated to microseconds (the precision of `TIMESTAMPTZ`) before it is returned and
+  stored, so a replay returns the same value as the original response.
+- **Assumptions:** keys are global, not per client — the API has no authentication (ADR-0004), so two clients
+  using the same key share one outcome. No request fingerprint: the only keyed operation takes no body, so the same
+  key cannot carry a different request; a second keyed operation would need an operation column or a fingerprint.
+
+The in-flight timeout, serialised runs, the order of key check and lock, and the retention cleanup (24 hours,
+ADR-0004) are decided in the planned *Hexagonal architecture* ADR.
 
 ### Seed data
 Schema migrations live in `db/migration`; seed data in a separate location (`db/seed`), added to Flyway's locations
 only in a `demo` profile, which Docker Compose enables. Integration tests start from an empty schema and insert
 their own data; no other environment gets demo rows. The seed covers:
-- every plan at its boundaries: `basic` 30/31 days, `premium` 45/46, `student` 31 and 365/366;
-- an unknown plan type and `Basic` (case-sensitive matching: no interest);
-- a zero balance and a balance whose interest hits a half-cent rounding edge;
+- every plan at its boundaries: `basic` 30/31 days, `student` 30/31 and 365/366, `premium` 45/46;
+- `days = 0`;
+- an unknown plan type and `Basic` (case-sensitive matching), both with `days > 30` so that only the plan type
+  explains the missing interest;
+- a zero balance and a large balance near the column maximum;
+- half-cent interest edges, where the legacy rounding of the binary `double` differs: `basic` with balance
+  `6.00` (interest 0.005, rounded up to 0.01) and `basic` with balance `18.00` (interest 0.015, rounded down to
+  0.01), both with `days > 30`;
 - deposits with several, one and no withdrawals.
 
 ## Consequences
 - The persistence adapter quotes every identifier; a forgotten quote fails at startup or in the integration tests,
   not silently.
 - Stored balances are always at cent precision; the API's 2-decimal representation (ADR-0004) is then lossless.
+- Balances of `10^13` or more cannot be stored; an update that would exceed the column fails instead of losing
+  precision.
 - Unknown plan types can be stored and earn no interest, exactly as in the legacy calculator.
 - How Flyway numbers and orders migrations across the two locations is settled in the persistence step.
 - **Verification (persistence step, Testcontainers):**
   - schema: the tables and columns exist with the brief's exact names; `NOT NULL` and `CHECK` constraints reject
     invalid rows; `RESTRICT` blocks deleting a deposit with withdrawals; `publicId` is generated when omitted;
-  - mapping: a `Double` ↔ `NUMERIC(19,2)` round trip, including a float-noise sum (e.g. `1000.10 + 0.83`) that is
-    stored as the exact decimal value;
+  - mapping: a `Double` ↔ `NUMERIC(15,2)` round trip, including a float-noise sum (`1000.10 + 0.83`) stored as
+    `1000.93`;
+  - idempotency: the `COMPLETED` update commits or rolls back together with the balance updates;
   - seed: loaded only with the `demo` profile and covering every case listed above.
