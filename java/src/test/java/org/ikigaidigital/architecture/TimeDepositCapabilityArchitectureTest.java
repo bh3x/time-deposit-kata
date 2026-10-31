@@ -120,7 +120,16 @@ class TimeDepositCapabilityArchitectureTest {
             .should().dependOnClassesThat()
             .resideInAnyPackage("jakarta.persistence..", "org.springframework.data..", "org.hibernate..");
 
-    // Implied by the rule above (annotations are dependencies); kept for its clearer failure message.
+    // Rule 5: the types generated from openapi.yaml appear only in REST adapters, so the contract's representation
+    // never leaks into the application or the domain.
+    @ArchTest
+    static final ArchRule generatedOpenApiTypesOnlyInRestAdapters = noClasses()
+            .that().resideOutsideOfPackage("..adapter.in.rest..")
+            .should().dependOnClassesThat().resideInAnyPackage(
+                    "org.ikigaidigital.shared.adapter.in.rest.api..",
+                    "org.ikigaidigital.shared.adapter.in.rest.model..");
+
+    // Implied by the JPA rule above (annotations are dependencies); kept for its clearer failure message.
     @ArchTest
     static final ArchRule entitiesOnlyInPersistenceAdapters = classes()
             .that().areAnnotatedWith(Entity.class)

@@ -2,6 +2,7 @@ plugins {
     java
     jacoco
     alias(libs.plugins.spring.boot)
+    alias(libs.plugins.openapi.generator)
 }
 
 group = "org.ikigaidigital"
@@ -24,6 +25,53 @@ dependencies {
     implementation(libs.spring.boot.starter.flyway)
     implementation(libs.flyway.database.postgresql)
     runtimeOnly(libs.postgresql)
+    // REST adapter (ADR-0002): Spring MVC for the generated interface, Bean Validation for its constraints
+    // (e.g. the Idempotency-Key length).
+    implementation(libs.spring.boot.starter.webmvc)
+    implementation(libs.spring.boot.starter.validation)
+}
+
+// Contract first (ADR-0002, ADR-0008 rule 6): the API interface and models are generated from openapi.yaml on every
+// build and never edited or committed. Only interfaces, no default methods, so an operation added to the contract
+// fails compilation until a controller implements it.
+val generatedOpenApiDir = layout.buildDirectory.dir("generated/openapi")
+
+openApiGenerate {
+    generatorName = "spring"
+    inputSpec = layout.projectDirectory.file("src/main/resources/openapi/openapi.yaml")
+    outputDir = generatedOpenApiDir
+    apiPackage = "org.ikigaidigital.shared.adapter.in.rest.api"
+    modelPackage = "org.ikigaidigital.shared.adapter.in.rest.model"
+    configOptions = mapOf(
+        "interfaceOnly" to "true",
+        "skipDefaultInterface" to "true",
+        "useSpringBoot4" to "true",
+        "useJackson3" to "true",
+        // One interface per tag, i.e. per capability (ADR-0008 rule 6).
+        "useTags" to "true",
+        "useBeanValidation" to "true",
+        // JSpecify, as Spring Framework 7 uses: its org.springframework.lang.Nullable is deprecated (-Werror).
+        "useJspecify" to "true",
+        // The base path comes from the contract's server URL (/api/v1), not from the controller.
+        "requestMappingMode" to "api_interface",
+        // Reproducible output: no build timestamp in @Generated.
+        "hideGenerationTimestamp" to "true",
+        // No jackson-databind-nullable dependency: the contract has no nullable fields.
+        "openApiNullable" to "false",
+        // ADR-0005: the application publishes no documentation, so no springdoc or Swagger annotations.
+        "documentationProvider" to "none",
+        "annotationLibrary" to "none",
+    )
+}
+
+sourceSets {
+    main {
+        java.srcDir(generatedOpenApiDir.map { it.dir("src/main/java") })
+    }
+}
+
+tasks.named("compileJava") {
+    dependsOn(tasks.named("openApiGenerate"))
 }
 
 tasks.withType<JavaCompile>().configureEach {
