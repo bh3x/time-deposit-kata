@@ -11,6 +11,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatNullPointerException;
 
 /**
  * Characterization tests: pin the legacy behaviour of {@link TimeDepositCalculator#updateBalance(List)} before any
@@ -182,6 +183,46 @@ class TimeDepositCalculatorCharacterizationTest {
 
             // 1000.83 * 0.01 / 12 = 0.834.. -> 0.83; the double sum carries noise into the second call (ADR-0006)
             assertThat(deposit.getBalance()).isEqualTo(1001.6600000000001);
+        }
+    }
+
+    @Nested
+    @DisplayName("legacy quirks: inputs the database rules out (ADR-0006), pinned so the refactoring keeps them")
+    class LegacyQuirks {
+
+        @Test
+        void nullPlanTypeIsNeverReadDuringTheFirstThirtyDays() {
+            assertThat(balanceAfterUpdate(null, 1000.00, 30)).isEqualTo(1000.00);
+        }
+
+        @Test
+        void nullPlanTypeFailsAfterThirtyDays() {
+            TimeDeposit deposit = new TimeDeposit(1, null, 1000.00, 31);
+
+            assertThatNullPointerException().isThrownBy(() -> calculator.updateBalance(List.of(deposit)));
+        }
+
+        @ParameterizedTest(name = "null balance fails at {0} days")
+        @ValueSource(ints = {0, 31})
+        void nullBalanceAlwaysFails(int days) {
+            TimeDeposit deposit = new TimeDeposit(1, "basic", null, days);
+
+            assertThatNullPointerException().isThrownBy(() -> calculator.updateBalance(List.of(deposit)));
+        }
+
+        @ParameterizedTest(name = "basic {0} -> {1}")
+        @CsvSource({"-6.00, -6.01", "-18.00, -18.01"})
+        void negativeBalanceGetsNegativeInterestRoundedAwayFromZero(double balance, double expected) {
+            assertThat(balanceAfterUpdate("basic", balance, 31)).isEqualTo(expected);
+        }
+
+        @Test
+        void depositsBeforeAFailingOneAreAlreadyUpdated() {
+            TimeDeposit updated = new TimeDeposit(1, "basic", 1000.00, 31);
+            TimeDeposit failing = new TimeDeposit(2, null, 1000.00, 31);
+
+            assertThatNullPointerException().isThrownBy(() -> calculator.updateBalance(List.of(updated, failing)));
+            assertThat(updated.getBalance()).isEqualTo(1000.83);
         }
     }
 }
