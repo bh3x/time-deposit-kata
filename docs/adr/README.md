@@ -19,7 +19,7 @@ An ADR captures one significant decision: its context, the options considered, t
 | [0003](0003-api-conventions.md) | API conventions | Accepted | 2026-10-31 |
 | [0004](0004-time-deposit-api-design.md) | Time deposit API design | Accepted | 2026-10-31 |
 | [0005](0005-endpoint-scope.md) | Endpoint scope | Accepted | 2026-10-31 |
-| [0006](0006-data-model.md) | Data model | Proposed | 2026-10-31 |
+| [0006](0006-data-model.md) | Data model | Accepted | 2026-10-31 |
 
 ## Planned decisions
 Numbers are assigned when each ADR is written.
