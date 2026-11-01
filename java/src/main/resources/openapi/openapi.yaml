@@ -54,7 +54,8 @@ paths:
         Applies one round of the monthly interest rules to every time deposit and stores the new balances,
         at most once per calendar month (UTC): the first request of a month applies the interest, every further
         request in that month returns that month's outcome without applying it again.
-        Runs are serialised: concurrent requests are processed one after another, never in parallel.
+        Runs never overlap: while this month's run is in progress, further requests of the month get 409;
+        runs of different months are applied one after another.
       responses:
         '200':
           description: >
