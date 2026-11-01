@@ -24,11 +24,10 @@ An ADR captures one significant decision: its context, the options considered, t
 | [0008](0008-hexagonal-architecture.md) | Hexagonal architecture | Accepted | 2026-10-31 |
 | [0009](0009-testing-strategy.md) | Testing strategy | Accepted | 2026-10-31 |
 | [0010](0010-local-runtime.md) | Local runtime with Docker Compose | Accepted | 2026-11-01 |
+| [0011](0011-interest-calculation-design.md) | Interest calculation design | Proposed | 2026-11-01 |
 
 ## Planned decisions
 Numbers are assigned when each ADR is written.
-- Interest calculation design; decides which known defects of the legacy calculation
-  ([`known-issues.md`](../known-issues.md)) the new interest policies keep or fix
 - Balance update consistency (concurrent runs and writers, idempotency reservation and flow, in-flight `409` and
   stale keys, key check vs lock order, 24-hour cleanup, single-deposit failures such as overflow, scale — see
   ADR-0008); must be accepted before `POST /balance-updates` is implemented; completes the pending scenarios in
