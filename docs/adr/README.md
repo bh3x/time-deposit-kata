@@ -26,7 +26,12 @@ An ADR captures one significant decision: its context, the options considered, t
 | [0010](0010-local-runtime.md) | Local runtime with Docker Compose | Accepted | 2026-11-01 |
 | [0011](0011-interest-calculation-design.md) | Interest calculation design | Accepted | 2026-11-01 |
 | [0012](0012-balance-update-consistency.md) | Balance update consistency | Accepted | 2026-11-01 |
+| [0013](0013-interest-periods.md) | Interest periods | Proposed | 2026-11-01 |
 
 ## Planned decisions
 Numbers are assigned when each ADR is written.
-None at the moment.
+- Request protection (deferred to keep the delivery small): a rate limit per operation (`429` with `Retry-After`, as
+  Problem Details, enforced in a Spring MVC interceptor rather than a servlet filter), `Retry-After` on `409`, an
+  in-memory short-circuit for duplicate balance updates in a completed month (the month table of ADR-0013 stays the
+  truth), CORS exposure of `Retry-After`, and a reverse proxy as the production complement for per-client and
+  multi-instance limits. Until then the system is bounded only by its thread and connection pools.
