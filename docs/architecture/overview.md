@@ -45,7 +45,7 @@ flowchart LR
     end
     subgraph domain["timedeposit/domain"]
       terms["TimeDepositTerms · ReadOnlyTimeDeposit"]
-      policies["interest/ (interest ADR)"]
+      policies["interest/ · InterestPolicies · RateWindowPolicy · NoInterestPolicy (ADR-0011)"]
     end
     subgraph root["root package (legacy, unchanged)"]
       calc["TimeDepositCalculator<br/>(belongs to timedeposit)"]
