@@ -43,12 +43,23 @@ public final class InMemoryBalanceUpdatePeriods implements RecordBalanceUpdatePo
         this.calls = calls;
     }
 
+    // The port promises times truncated to microseconds, the precision of timestamptz (ADR-0012 C). A finer instant
+    // would match its own copy here but not the row PostgreSQL stores, so the fake rejects it instead of hiding a
+    // missing truncation.
+    private static Instant microseconds(Instant instant, String what) {
+        if (instant.getNano() % 1_000 != 0) {
+            throw new IllegalArgumentException(what + " is finer than microseconds: " + instant);
+        }
+        return instant;
+    }
+
     public void storeInProgress(YearMonth period, Instant token) {
-        rows.put(period, new Row(new InProgress(token), null));
+        rows.put(period, new Row(new InProgress(microseconds(token, "token")), null));
     }
 
     public void storeCompleted(YearMonth period, BalanceUpdateOutcome outcome, Instant completedAt) {
-        rows.put(period, new Row(new Completed(outcome), completedAt));
+        microseconds(outcome.executedAt(), "executedAt");
+        rows.put(period, new Row(new Completed(outcome), microseconds(completedAt, "completedAt")));
     }
 
     public void lockByAnotherTransaction(YearMonth period) {
@@ -102,7 +113,7 @@ public final class InMemoryBalanceUpdatePeriods implements RecordBalanceUpdatePo
     @Override
     public boolean reserve(YearMonth period, Instant token) {
         calls.add("reserve");
-        return rows.putIfAbsent(period, new Row(new InProgress(token), null)) == null;
+        return rows.putIfAbsent(period, new Row(new InProgress(microseconds(token, "token")), null)) == null;
     }
 
     // Reads past a lock held by another transaction, like a plain SELECT (ADR-0014).
@@ -123,6 +134,7 @@ public final class InMemoryBalanceUpdatePeriods implements RecordBalanceUpdatePo
     @Override
     public void takeOver(YearMonth period, Instant token) {
         calls.add("takeOver");
+        microseconds(token, "token");
         if (!(stateOf(period).orElse(null) instanceof InProgress)) {
             throw new IllegalStateException("balance update period " + period + " is not in progress");
         }
@@ -143,6 +155,9 @@ public final class InMemoryBalanceUpdatePeriods implements RecordBalanceUpdatePo
     @Override
     public boolean complete(YearMonth period, Instant token, BalanceUpdateOutcome outcome, Instant completedAt) {
         calls.add("complete");
+        microseconds(token, "token");
+        microseconds(outcome.executedAt(), "executedAt");
+        microseconds(completedAt, "completedAt");
         if (completeMatchesNothing || !new InProgress(token).equals(stateOf(period).orElse(null))) {
             return false;
         }
@@ -153,6 +168,7 @@ public final class InMemoryBalanceUpdatePeriods implements RecordBalanceUpdatePo
     @Override
     public void release(YearMonth period, Instant token) {
         calls.add("release");
+        microseconds(token, "token");
         if (releaseFailure != null) {
             throw releaseFailure;
         }
