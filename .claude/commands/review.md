@@ -15,6 +15,7 @@ Unstaged:
 Working tree (incl. untracked):
 !`git status --short --untracked-files=all`
 
-The reviewer works on its own until it can present its findings: it asks for no permission or decision, runs no
-builds, tests or Docker, and reports anything it could not check as "not run". Do not change any files.
+The reviewer works on its own until it can present its findings: it asks for no permission or decision, verifies
+with the allowed command forms (build and tests incl. Docker, contract lint, smoke run as needed) and reports anything
+it could not check as "not run". Do not change any files.
 Report findings ranked by severity.
