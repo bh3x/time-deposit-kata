@@ -29,6 +29,12 @@ class BalanceUpdatePeriodPersistenceAdapter implements RecordBalanceUpdatePort {
 
     private static final String STATE_COLUMNS = "\"status\", \"createdAt\", \"processedCount\", \"executedAt\"";
 
+    // One statement for the three state reads, which differ only in their locking clause. Plain concatenation with
+    // explicit spaces: a text block whose closing delimiter ends its only line loses that line's indentation, and
+    // with it the space before "from".
+    private static final String SELECT_STATE =
+            "select " + STATE_COLUMNS + " from \"balanceUpdatePeriods\" where \"period\" = :period";
+
     private static final RowMapper<BalanceUpdatePeriodState> STATE = (row, rowNumber) ->
             "COMPLETED".equals(row.getString("status"))
                     ? new Completed(new BalanceUpdateOutcome(row.getInt("processedCount"),
@@ -53,15 +59,12 @@ class BalanceUpdatePeriodPersistenceAdapter implements RecordBalanceUpdatePort {
     // No locking clause: a plain SELECT in PostgreSQL neither takes a row lock nor waits for one (ADR-0014).
     @Override
     public Optional<BalanceUpdatePeriodState> find(YearMonth period) {
-        return jdbc.sql("select " + STATE_COLUMNS + """
-                 from "balanceUpdatePeriods" where "period" = :period""")
-                .param("period", period.atDay(1)).query(STATE).optional();
+        return jdbc.sql(SELECT_STATE).param("period", period.atDay(1)).query(STATE).optional();
     }
 
     @Override
     public Optional<BalanceUpdatePeriodState> findUnlocked(YearMonth period) {
-        return jdbc.sql("select " + STATE_COLUMNS + """
-                 from "balanceUpdatePeriods" where "period" = :period for update skip locked""")
+        return jdbc.sql(SELECT_STATE + " for update skip locked")
                 .param("period", period.atDay(1)).query(STATE).optional();
     }
 
@@ -78,9 +81,7 @@ class BalanceUpdatePeriodPersistenceAdapter implements RecordBalanceUpdatePort {
 
     @Override
     public Optional<BalanceUpdatePeriodState> lock(YearMonth period) {
-        return jdbc.sql("select " + STATE_COLUMNS + """
-                 from "balanceUpdatePeriods" where "period" = :period for update""")
-                .param("period", period.atDay(1)).query(STATE).optional();
+        return jdbc.sql(SELECT_STATE + " for update").param("period", period.atDay(1)).query(STATE).optional();
     }
 
     @Override
