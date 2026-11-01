@@ -29,6 +29,8 @@ class TimeDepositsController implements TimeDepositsApi {
         this.listTimeDeposits = listTimeDeposits;
     }
 
+    // Keeps the use case's order: deterministic (persistence orders by internal key), though the contract promises
+    // no order (ADR-0004).
     @Override
     public ResponseEntity<List<TimeDepositDto>> listTimeDeposits() {
         return ResponseEntity.ok(listTimeDeposits.listAll().stream()
@@ -48,6 +50,8 @@ class TimeDepositsController implements TimeDepositsApi {
         List<WithdrawalDto> withdrawals = view.withdrawals().stream()
                 .map(TimeDepositsController::toWithdrawal)
                 .toList();
+        // planType is passed through unchanged: an open, case-sensitive value set (x-extensible-enum, ADR-0003), so an
+        // unknown plan such as "gold" is listed as stored rather than rejected or normalised.
         return new TimeDepositDto(view.id(), terms.getPlanType(), MoneyFormatter.format(terms.getBalance()),
                 terms.getDays(), withdrawals);
     }
