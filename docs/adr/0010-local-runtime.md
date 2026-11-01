@@ -1,6 +1,6 @@
 # ADR-0010: Local runtime with Docker Compose
 
-- **Status:** Accepted
+- **Status:** Accepted; partly superseded by [ADR-0013](0013-interest-periods.md)
 - **Date:** 2026-11-01
 
 ## Context

@@ -1,6 +1,6 @@
 # ADR-0013: Interest periods
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-11-01
 
 ## Context

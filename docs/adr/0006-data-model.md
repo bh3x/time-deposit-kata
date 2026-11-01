@@ -1,6 +1,6 @@
 # ADR-0006: Data model
 
-- **Status:** Accepted
+- **Status:** Accepted; partly superseded by [ADR-0013](0013-interest-periods.md)
 - **Date:** 2026-10-31
 
 ## Context
