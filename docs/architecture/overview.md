@@ -72,7 +72,8 @@ flowchart LR
 - **Dependencies point inward:** adapters depend on ports; the application depends on the domain; the domain has
   no framework dependencies. ArchUnit enforces the rules of ADR-0008.
 - **Ports:** `port.in` is the driving side (the application's API), `port.out` the driven side (what it needs).
-- **Wiring:** services carry `@UseCase` (a `@Service` stereotype); `TimeDepositCalculator` is an explicit `@Bean`
+- **Wiring:** implementations of `port.in` carry `@UseCase` (a `@Service` stereotype); the transactional steps of
+  the balance update are plain `@Service` beans (ADR-0012 B); `TimeDepositCalculator` is an explicit `@Bean`
   in `configuration`; the main class sits in the root package.
 
 ## 4. Key flows
@@ -132,8 +133,9 @@ At most one run per UTC calendar month (ADR-0013), with ADR-0012's serialisation
   (ADR-0004, ADR-0006).
 - **Persistence mapping:** JPA entities exist only in the persistence adapter and are mapped two-way to
   `TimeDeposit`; identifiers are quoted camelCase as in the brief (ADR-0006, ADR-0008).
-- **Transactions:** adapters call services only through `port.in` (ADR-0008). A use case with one transaction
-  carries `@Transactional` itself; the balance update needs several, so `ApplyMonthlyInterestService` has none and
+- **Transactions:** adapters call services only through `port.in` (ADR-0008). A use case that needs exactly one
+  transaction would carry `@Transactional` itself (ADR-0008 decision 7); today neither does. The balance update needs
+  several, so `ApplyMonthlyInterestService` has none and
   calls `BalanceUpdatePeriodReservations` (reserve, release) and `MonthlyInterestRun` (the run), each committed on
   its own (ADR-0012 B). The list reads in one statement and needs no transaction.
 - **Errors:** RFC 9457 Problem Details for all errors handled by Spring MVC, including `404` for unknown paths;

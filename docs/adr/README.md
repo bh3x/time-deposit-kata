@@ -62,7 +62,8 @@ Numbers are assigned when each ADR is written.
   machines. Options: a GitHub Actions workflow (Gradle with wrapper validation, Testcontainers on the runner, the
   Redocly lint, `docker build`), optionally with Dependabot or Renovate for versions.
 - Operability of the local stack (ADR-0010): the app container has no readiness check, so `docker compose up --wait`
-  reports it healthy before Spring has started; Compose's default 10 s stop grace period is shorter than Spring's
+  reports it ready (running) before Spring has started — a healthcheck must not assume `curl` in the JRE image
+  (unverified); Compose's default 10 s stop grace period is shorter than Spring's
   graceful shutdown, so a killed run leaves the month in progress until the 10-minute takeover; responses carry no
   `X-Content-Type-Options` or `Cache-Control` headers. Options: a Compose healthcheck on the existing list operation
   (no new route), `stop_grace_period`, and a small header filter — or accept and document each.

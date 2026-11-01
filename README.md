@@ -21,13 +21,14 @@ the [ADR index](docs/adr/README.md) (open topics are listed there under *Planned
 The scenarios behind the tests are listed in [`docs/testing.md`](docs/testing.md).
 
 ### Key assumptions
-Where the brief is silent, these readings shape what you see (each is justified in its ADR and in code comments):
+Where the brief is silent, these readings shape what you see (each is justified in its ADR and in the code or the
+contract):
 - **Monthly interest is applied at most once per UTC calendar month.** Later requests in the month return that
   month's outcome; a missed month is not applied later (ADR-0013).
 - **`days` is never advanced** by the application: it is the deposit's age as stored, so a deposit stays in the
   same rate window until someone updates `days` (ADR-0004).
-- **Money is a two-decimal string** in the API (`"1000.83"`), stored as `NUMERIC(15,2)`; only the interest is
-  rounded, exactly as in the legacy calculator (ADR-0004, ADR-0006).
+- **Money is a two-decimal string** in the API (`"1000.83"`), stored as `NUMERIC(15,2)`; the calculator rounds only
+  the interest, exactly as before, and the stored balance is that cent amount (ADR-0004, ADR-0006).
 - **Unknown plan types** are stored, listed unchanged and earn no interest; plan types match case-sensitively, as
   in the legacy calculator (ADR-0011, [`known-issues.md`](docs/known-issues.md)).
 - **The API's `id` is a public UUID;** the table keeps the brief's integer `id` as an internal key that is never
@@ -92,7 +93,8 @@ month.
 - **Port 8080 or 8081 already in use:** stop the other process. The ports are fixed because the contract's server
   URL (`http://localhost:8080/api/v1`) and the allowed CORS origin (`http://localhost:8081`) name them (ADR-0010).
 - **Swagger UI shows "Failed to fetch" or a CORS error:** open it as `http://localhost:8081`, not
-  `http://127.0.0.1:8081`; the browser treats them as different origins.
+  `http://127.0.0.1:8081`; the browser treats them as different origins. The same message appears while the app
+  is still starting: wait for `Started TimeDepositApplication`.
 - **`no configuration file provided`:** run Compose from `java/`, or pass `-f java/compose.yaml` from the
   repository root.
 - **Balances no longer change:** the month was already applied; reset with `docker compose down -v`.

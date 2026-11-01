@@ -1,7 +1,7 @@
 # Testing guide
 
 How to test changes in this repository. The decisions and their reasons are in
-[ADR-0009](adr/0009-testing-strategy.md), refined by [ADR-0015](adr/0015-testing-strategy-as-built.md); the
+[ADR-0009](adr/0009-testing-strategy.md), partly superseded by [ADR-0015](adr/0015-testing-strategy-as-built.md); the
 architecture they refer to is in
 [ADR-0008](adr/0008-hexagonal-architecture.md).
 
@@ -108,7 +108,8 @@ only known once that step decides the server URL (ADR-0005, Consequences).
 
 ## Quality checks
 - **Coverage:** read the JaCoCo report to find untested branches; there is no threshold.
-- **Test strength:** PIT is deferred (ADR-0015, *Planned decisions*). Use targeted manual mutants instead:
+- **Test strength:** PIT is deferred (ADR-0015; [*Planned decisions*](adr/README.md#planned-decisions)). Use
+  targeted manual mutants instead:
   temporarily break the code a pull request changes, show which tests fail and record it in the pull request; never
   commit the mutant, and restore the file by editing it back — `git checkout -- <file>` resets it to the last
   commit and discards uncommitted work.
