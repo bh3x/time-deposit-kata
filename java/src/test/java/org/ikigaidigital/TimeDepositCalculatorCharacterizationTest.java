@@ -214,6 +214,8 @@ class TimeDepositCalculatorCharacterizationTest {
     @DisplayName("legacy quirks: inputs the database rules out (ADR-0006), pinned so the refactoring keeps them")
     class LegacyQuirks {
 
+        // Named after the legacy code, which did not read the plan type within the grace period. Since the
+        // interest-policy refactoring it is read but ignored there (ADR-0011); what this pins is unchanged: no failure.
         @Test
         void nullPlanTypeIsNeverReadDuringTheFirstThirtyDays() {
             assertThat(balanceAfterUpdate(null, 1000.00, 30)).isEqualTo(1000.00);

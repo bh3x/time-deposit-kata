@@ -24,8 +24,11 @@ public class TimeDepositCalculator {
 
     // One deposit at a time, in list order, and always written, also when the interest is 0.0 (ADR-0011): computing
     // all interests first would change which deposits are updated when one fails (known issue #7), and skipping the
-    // write would let a null balance pass (known issue #4) and keep -0.0. Wrapping a null element throws
-    // NullPointerException, as the legacy code did (known issue #10).
+    // write would let a null balance pass (known issue #4) and keep -0.0. Reading the plan type of a null element
+    // throws NullPointerException, as the legacy code did (known issue #10).
+    // Assumption: the order and number of getter calls are not behaviour. The plan type is now read within the grace
+    // period too, and an unknown plan's days are not read at all; TimeDeposit's getters only return their fields, so
+    // results and exception types stay identical (characterization suite, frozen copy, randomized comparison).
     public void updateBalance(List<TimeDeposit> timeDeposits) {
         for (TimeDeposit deposit : timeDeposits) {
             double interest = interestPolicies.policyFor(deposit.getPlanType())
