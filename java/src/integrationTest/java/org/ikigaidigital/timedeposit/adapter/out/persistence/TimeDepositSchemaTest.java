@@ -36,7 +36,6 @@ class TimeDepositSchemaTest {
     private static final String RESTRICT_VIOLATION = "23001";
     private static final String UNIQUE_VIOLATION = "23505";
     private static final String NUMERIC_OUT_OF_RANGE = "22003";
-    private static final String STRING_TOO_LONG = "22001";
     private static final String GENERATED_ALWAYS = "428C9";
 
     @Autowired
@@ -85,7 +84,7 @@ class TimeDepositSchemaTest {
     class Structure {
 
         @ParameterizedTest(name = "table \"{0}\"")
-        @ValueSource(strings = {"timeDeposits", "withdrawals", "idempotencyKeys"})
+        @ValueSource(strings = {"timeDeposits", "withdrawals", "balanceUpdatePeriods"})
         void tablesExistWithExactQuotedNames(String table) {
             Integer exact = jdbc.sql("select count(*) from information_schema.tables where table_schema = current_schema() and table_name = ?")
                     .param(table).query(Integer.class).single();
@@ -110,12 +109,12 @@ class TimeDepositSchemaTest {
                 "withdrawals,     timeDepositId,  integer,                  NO",
                 "withdrawals,     amount,         numeric,                  NO",
                 "withdrawals,     date,           date,                     NO",
-                "idempotencyKeys, idempotencyKey, character varying,        NO",
-                "idempotencyKeys, status,         character varying,        NO",
-                "idempotencyKeys, processedCount, integer,                  YES",
-                "idempotencyKeys, executedAt,     timestamp with time zone, YES",
-                "idempotencyKeys, createdAt,      timestamp with time zone, NO",
-                "idempotencyKeys, completedAt,    timestamp with time zone, YES"})
+                "balanceUpdatePeriods, period,         date,                     NO",
+                "balanceUpdatePeriods, status,         character varying,        NO",
+                "balanceUpdatePeriods, processedCount, integer,                  YES",
+                "balanceUpdatePeriods, executedAt,     timestamp with time zone, YES",
+                "balanceUpdatePeriods, createdAt,      timestamp with time zone, NO",
+                "balanceUpdatePeriods, completedAt,    timestamp with time zone, YES"})
         void columnsHaveTheDecidedTypesAndNullability(String table, String column, String type, String nullable) {
             var actual = jdbc.sql("""
                             select data_type, is_nullable from information_schema.columns
@@ -143,12 +142,12 @@ class TimeDepositSchemaTest {
             assertThat(actual).isEqualTo(precision + "," + scale);
         }
 
-        @ParameterizedTest(name = "idempotencyKeys.{0} holds at most {1} characters")
-        @CsvSource({"idempotencyKey, 255", "status, 20"})
+        @ParameterizedTest(name = "balanceUpdatePeriods.{0} holds at most {1} characters")
+        @CsvSource({"status, 20"})
         void textColumnsHaveTheirMaximumLength(String column, int maximumLength) {
             Integer actual = jdbc.sql("""
                             select character_maximum_length from information_schema.columns
-                            where table_schema = current_schema() and table_name = 'idempotencyKeys'
+                            where table_schema = current_schema() and table_name = 'balanceUpdatePeriods'
                               and column_name = ?
                             """)
                     .param(column).query(Integer.class).single();
@@ -332,20 +331,41 @@ class TimeDepositSchemaTest {
     }
 
     @Nested
-    @DisplayName("S2: constraints on idempotency keys")
-    class IdempotencyKeyConstraints {
+    @DisplayName("S1/S2: balance update periods (ADR-0013)")
+    class BalanceUpdatePeriodConstraints {
 
-        private void insertKey(String key, String status, Integer processedCount, String executedAt,
-                               String createdAt, String completedAt) {
+        private void insertPeriod(String period, String status, Integer processedCount, String executedAt,
+                                  String createdAt, String completedAt) {
             jdbc.sql("""
-                            insert into "idempotencyKeys"
-                                ("idempotencyKey", "status", "processedCount", "executedAt", "createdAt", "completedAt")
-                            values (?, ?, ?, ?::timestamptz, ?::timestamptz, ?::timestamptz)
+                            insert into "balanceUpdatePeriods"
+                                ("period", "status", "processedCount", "executedAt", "createdAt", "completedAt")
+                            values (?::date, ?, ?, ?::timestamptz, ?::timestamptz, ?::timestamptz)
                             """)
-                    .params(key, status, processedCount, executedAt, createdAt, completedAt).update();
+                    .params(period, status, processedCount, executedAt, createdAt, completedAt).update();
         }
 
-        // Exactly two states (ADR-0006): IN_PROGRESS without outcome, COMPLETED with the full outcome.
+        // Replaced by balanceUpdatePeriods (ADR-0013); checked in both spellings, quoted and folded.
+        @ParameterizedTest(name = "table {0} no longer exists")
+        @ValueSource(strings = {"idempotencyKeys", "idempotencykeys"})
+        void theKeyTableNoLongerExists(String table) {
+            assertThat(jdbc.sql("""
+                    select count(*) from information_schema.tables
+                    where table_schema = current_schema() and table_name = ?
+                    """).param(table).query(Integer.class).single()).isZero();
+        }
+
+        @Test
+        void periodIsThePrimaryKey() {
+            assertThat(jdbc.sql("""
+                    select k.column_name from information_schema.table_constraints c
+                    join information_schema.key_column_usage k
+                      on k.constraint_name = c.constraint_name and k.table_schema = c.table_schema
+                    where c.table_schema = current_schema() and c.table_name = 'balanceUpdatePeriods'
+                      and c.constraint_type = 'PRIMARY KEY'
+                    """).query(String.class).list()).containsExactly("period");
+        }
+
+        // Exactly two states, as for the former keys (ADR-0006): IN_PROGRESS without outcome, COMPLETED with all of it.
         @ParameterizedTest(name = "{0}: status {1}, count {2}, executed {3}, completed {4}")
         @CsvSource(nullValues = "NULL", value = {
                 "unknown status,           FOO,         NULL, NULL,                 NULL",
@@ -359,51 +379,46 @@ class TimeDepositSchemaTest {
                 "negative count,           COMPLETED,   -1,   2026-10-31T10:00:00Z, 2026-10-31T10:00:01Z"})
         void rejectsInconsistentRows(String description, String status, Integer processedCount, String executedAt,
                                      String completedAt) {
-            assertRejected(() -> insertKey("key", status, processedCount, executedAt, "2026-10-31T09:59:59Z",
+            assertRejected(() -> insertPeriod("2026-10-01", status, processedCount, executedAt, "2026-10-31T09:59:59Z",
                     completedAt), CHECK_VIOLATION);
         }
 
         @ParameterizedTest(name = "{0} accepted")
         @CsvSource(nullValues = "NULL", value = {
-                "in progress,          k1, IN_PROGRESS, NULL, NULL,                 NULL",
-                "completed with zero,  k2, COMPLETED,   0,    2026-10-31T10:00:00Z, 2026-10-31T10:00:01Z"})
-        void acceptsConsistentRows(String description, String key, String status, Integer processedCount,
+                "in progress,          2026-10-01, IN_PROGRESS, NULL, NULL,                 NULL",
+                "completed with zero,  2026-11-01, COMPLETED,   0,    2026-10-31T10:00:00Z, 2026-10-31T10:00:01Z"})
+        void acceptsConsistentRows(String description, String period, String status, Integer processedCount,
                                    String executedAt, String completedAt) {
-            insertKey(key, status, processedCount, executedAt, "2026-10-31T09:59:59Z", completedAt);
+            insertPeriod(period, status, processedCount, executedAt, "2026-10-31T09:59:59Z", completedAt);
 
-            assertThat(jdbc.sql("select count(*) from \"idempotencyKeys\" where \"idempotencyKey\" = ?")
-                    .param(key).query(Integer.class).single()).isEqualTo(1);
+            assertThat(jdbc.sql("select count(*) from \"balanceUpdatePeriods\" where \"period\" = ?::date")
+                    .param(period).query(Integer.class).single()).isEqualTo(1);
         }
 
-        // The column holds up to 255 characters (storage half of P8); the header's minimum of 1 character is validated
-        // by the REST adapter (ADR-0004, scenario P7).
-        @ParameterizedTest(name = "key of length {0} accepted")
-        @ValueSource(ints = {1, 255})
-        void acceptsKeysOfTheAllowedLength(int length) {
-            String key = "k".repeat(length);
-
-            insertKey(key, "IN_PROGRESS", null, null, "2026-10-31T09:59:59Z", null);
-
-            assertThat(jdbc.sql("select \"idempotencyKey\" from \"idempotencyKeys\"").query(String.class).single())
-                    .isEqualTo(key);
+        // A period is the first day of its month, so one month can never have two rows.
+        @ParameterizedTest(name = "period {0} rejected")
+        @ValueSource(strings = {"2026-11-02", "2026-11-15", "2026-11-30"})
+        void rejectsAPeriodThatIsNotTheFirstDayOfAMonth(String period) {
+            assertRejected(() -> insertPeriod(period, "IN_PROGRESS", null, null, "2026-10-31T09:59:59Z", null),
+                    CHECK_VIOLATION);
         }
 
         @Test
-        void rejectsATooLongKey() {
-            assertRejected(() -> insertKey("k".repeat(256), "IN_PROGRESS", null, null, "2026-10-31T09:59:59Z", null),
-                    STRING_TOO_LONG);
+        void rejectsAMissingPeriod() {
+            assertRejected(() -> insertPeriod(null, "IN_PROGRESS", null, null, "2026-10-31T09:59:59Z", null),
+                    NOT_NULL_VIOLATION);
         }
 
         @Test
         void rejectsAMissingCreationTime() {
-            assertRejected(() -> insertKey("key", "IN_PROGRESS", null, null, null, null), NOT_NULL_VIOLATION);
+            assertRejected(() -> insertPeriod("2026-11-01", "IN_PROGRESS", null, null, null, null), NOT_NULL_VIOLATION);
         }
 
         @Test
-        void rejectsADuplicateKey() {
-            insertKey("key", "IN_PROGRESS", null, null, "2026-10-31T09:59:59Z", null);
+        void rejectsADuplicatePeriod() {
+            insertPeriod("2026-11-01", "IN_PROGRESS", null, null, "2026-10-31T09:59:59Z", null);
 
-            assertRejected(() -> insertKey("key", "IN_PROGRESS", null, null, "2026-10-31T09:59:59Z", null),
+            assertRejected(() -> insertPeriod("2026-11-01", "IN_PROGRESS", null, null, "2026-10-31T09:59:59Z", null),
                     UNIQUE_VIOLATION);
         }
     }

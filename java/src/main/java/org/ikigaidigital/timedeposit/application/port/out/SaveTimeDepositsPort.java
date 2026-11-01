@@ -10,7 +10,7 @@ public interface SaveTimeDepositsPort {
     /**
      * Writes the balance of each deposit, and nothing else, by its internal key, rounded to cents (ADR-0006). The
      * statements are executed before this method returns, so a later write in the same transaction (the switch of the
-     * idempotency key to completed) comes after them. Fails with {@link IllegalStateException} for a deposit that is
+     * month to completed, ADR-0013) comes after them. Fails with {@link IllegalStateException} for a deposit that is
      * not stored, and with the database's error for a balance the column cannot hold.
      */
     void saveBalances(List<TimeDeposit> deposits);

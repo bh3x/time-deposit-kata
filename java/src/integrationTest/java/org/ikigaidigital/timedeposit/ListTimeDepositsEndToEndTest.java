@@ -37,7 +37,7 @@ class ListTimeDepositsEndToEndTest {
     @BeforeEach
     void truncateTables() {
         JdbcClient jdbc = JdbcClient.create(dataSource);
-        jdbc.sql("truncate \"withdrawals\", \"timeDeposits\", \"idempotencyKeys\" restart identity").update();
+        jdbc.sql("truncate \"withdrawals\", \"timeDeposits\", \"balanceUpdatePeriods\" restart identity").update();
         rows = new TimeDepositRows(jdbc);
     }
 

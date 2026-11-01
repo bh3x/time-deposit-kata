@@ -13,8 +13,8 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
  * mappings (ADR-0005).
  * <p>
  * Methods, headers and credentials are listed explicitly rather than taken from Spring's defaults: {@code GET} and
- * {@code HEAD} for the list, {@code POST} for the balance update; {@code Idempotency-Key} is the contract's only
- * request header and {@code Content-Type} lets clients send it on a POST. No credentials: the API has no
+ * {@code HEAD} for the list, {@code POST} for the balance update; the contract defines no request header since
+ * ADR-0013, and {@code Content-Type} stays allowed because browser clients may send it on a POST. No credentials: the API has no
  * authentication ({@code security: []}). A request from another origin is rejected by Spring with a plain-text
  * {@code 403}; assumption: like container-level errors, this lies outside the contract (ADR-0010).
  */
@@ -33,7 +33,7 @@ public class ApiCorsConfiguration implements WebMvcConfigurer {
         registry.addMapping("/api/**")
                 .allowedOrigins(properties.allowedOrigins().toArray(String[]::new))
                 .allowedMethods("GET", "HEAD", "POST")
-                .allowedHeaders("Idempotency-Key", HttpHeaders.CONTENT_TYPE)
+                .allowedHeaders(HttpHeaders.CONTENT_TYPE)
                 .allowCredentials(false);
     }
 }

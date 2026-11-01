@@ -2,19 +2,24 @@ package org.ikigaidigital.timedeposit.application.service;
 
 import org.ikigaidigital.TimeDeposit;
 import org.ikigaidigital.TimeDepositCalculator;
-import org.ikigaidigital.timedeposit.application.model.BalanceUpdateKeyState.Completed;
-import org.ikigaidigital.timedeposit.application.model.BalanceUpdateKeyState.InProgress;
 import org.ikigaidigital.timedeposit.application.model.BalanceUpdateOutcome;
-import org.ikigaidigital.timedeposit.application.model.BalanceUpdateResult.KeyInProgress;
+import org.ikigaidigital.timedeposit.application.model.BalanceUpdatePeriodState.Completed;
+import org.ikigaidigital.timedeposit.application.model.BalanceUpdatePeriodState.InProgress;
+import org.ikigaidigital.timedeposit.application.model.BalanceUpdateResult;
+import org.ikigaidigital.timedeposit.application.model.BalanceUpdateResult.MonthInProgress;
 import org.ikigaidigital.timedeposit.application.model.BalanceUpdateResult.Succeeded;
-import org.ikigaidigital.timedeposit.application.port.out.fake.InMemoryBalanceUpdateRecords;
+import org.ikigaidigital.timedeposit.application.port.out.fake.InMemoryBalanceUpdatePeriods;
 import org.ikigaidigital.timedeposit.application.port.out.fake.InMemoryTimeDeposits;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.time.YearMonth;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
@@ -25,7 +30,8 @@ import static org.assertj.core.api.Assertions.assertThatIllegalStateException;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * The balance update use case of ADR-0012 with in-memory ports and the real calculator (ADR-0009). The services are
+ * The balance update use case of ADR-0013 with in-memory ports and the real calculator (ADR-0009): at most one run per
+ * UTC calendar month, with ADR-0012's reservation, takeover, fence and release keyed by the month. The services are
  * wired by hand, so @Transactional has no effect here: transactions and locks are covered by the persistence and
  * end-to-end tests. Each test starts at the same instant, which has nanoseconds to show the truncation.
  */
@@ -33,17 +39,23 @@ class ApplyMonthlyInterestServiceTest {
 
     private static final Instant NOW = Instant.parse("2026-11-01T10:15:30.123456789Z");
     private static final Instant NOW_MICROS = Instant.parse("2026-11-01T10:15:30.123456Z");
+    private static final YearMonth NOVEMBER = YearMonth.of(2026, 11);
+    private static final YearMonth OCTOBER = YearMonth.of(2026, 10);
     private static final Duration ONE_MICROSECOND = Duration.ofNanos(1_000);
-    private static final BalanceUpdateOutcome STORED = new BalanceUpdateOutcome(3, Instant.parse("2026-10-31T08:00:00Z"));
+    private static final BalanceUpdateOutcome STORED = new BalanceUpdateOutcome(3, Instant.parse("2026-11-01T08:00:00Z"));
 
     private final List<String> calls = new ArrayList<>();
     private final InMemoryTimeDeposits deposits = new InMemoryTimeDeposits(calls);
-    private final InMemoryBalanceUpdateRecords records = new InMemoryBalanceUpdateRecords(calls);
+    private final InMemoryBalanceUpdatePeriods periods = new InMemoryBalanceUpdatePeriods(calls);
     private final MutableClock clock = new MutableClock(NOW, ZoneOffset.UTC);
 
     private ApplyMonthlyInterestService service() {
-        return new ApplyMonthlyInterestService(new IdempotencyKeyReservations(records, clock),
-                new MonthlyInterestRun(deposits, deposits, records, new TimeDepositCalculator(), clock));
+        return serviceWith(clock);
+    }
+
+    private ApplyMonthlyInterestService serviceWith(MutableClock clock) {
+        return new ApplyMonthlyInterestService(new BalanceUpdatePeriodReservations(periods, clock),
+                new MonthlyInterestRun(deposits, deposits, periods, new TimeDepositCalculator(), clock));
     }
 
     private static Succeeded succeeded(int processedCount, Instant executedAt) {
@@ -51,28 +63,28 @@ class ApplyMonthlyInterestServiceTest {
     }
 
     @Nested
-    @DisplayName("without a key: one run (P1-P3, P5)")
-    class WithoutKey {
+    @DisplayName("the first request of a month runs (P1, P2, P5)")
+    class FirstRequest {
 
         @Test
         void appliesInterestAndCountsUnchangedDeposits() {
             deposits.store(new TimeDeposit(1, "basic", 1000.00, 31), new TimeDeposit(2, "basic", 1000.00, 30));
 
             assertThat(service().applyMonthlyInterest()).isEqualTo(succeeded(2, NOW_MICROS));
+
             assertThat(deposits.balanceOf(1)).isEqualTo(1000.83);
             assertThat(deposits.balanceOf(2)).isEqualTo(1000.00);
+            assertThat(calls).containsExactly("reserve", "lock", "load", "save", "complete");
+            assertThat(periods.stateOf(NOVEMBER)).contains(new Completed(new BalanceUpdateOutcome(2, NOW_MICROS)));
+            assertThat(periods.completedAtOf(NOVEMBER)).contains(NOW_MICROS);
         }
 
-        // ADR-0006: microseconds, the precision of timestamptz, truncated rather than rounded; always UTC.
+        // ADR-0006: microseconds, the precision of timestamptz, truncated rather than rounded.
         @Test
-        void truncatesExecutedAtToMicrosecondsWhateverTheClockZone() {
-            MutableClock berlin = new MutableClock(Instant.parse("2026-11-01T10:15:30.123456999Z"),
-                    ZoneId.of("Europe/Berlin"));
-            ApplyMonthlyInterestService service = new ApplyMonthlyInterestService(
-                    new IdempotencyKeyReservations(records, berlin),
-                    new MonthlyInterestRun(deposits, deposits, records, new TimeDepositCalculator(), berlin));
+        void truncatesExecutedAtToMicroseconds() {
+            MutableClock late = new MutableClock(Instant.parse("2026-11-01T10:15:30.123456999Z"), ZoneOffset.UTC);
 
-            assertThat(service.applyMonthlyInterest()).isEqualTo(succeeded(0, NOW_MICROS));
+            assertThat(serviceWith(late).applyMonthlyInterest()).isEqualTo(succeeded(0, NOW_MICROS));
         }
 
         // ADR-0012: executedAt is read once the deposits are locked, so serialised runs get increasing times.
@@ -83,109 +95,143 @@ class ApplyMonthlyInterestServiceTest {
             assertThat(service().applyMonthlyInterest()).isEqualTo(succeeded(0, NOW_MICROS.plusSeconds(1)));
         }
 
+        // A month with no deposits is still applied: a deposit added later earns nothing until the next month.
         @Test
-        void eachCallAppliesInterestAgain() {
+        void aZeroOutcomeStillCompletesTheMonth() {
+            assertThat(service().applyMonthlyInterest()).isEqualTo(succeeded(0, NOW_MICROS));
             deposits.store(new TimeDeposit(1, "basic", 1000.00, 31));
 
-            service().applyMonthlyInterest();
-            service().applyMonthlyInterest();
-
-            assertThat(deposits.balanceOf(1)).isEqualTo(1001.66);
-        }
-
-        @Test
-        void returnsZeroWhenNoDepositsExist() {
             assertThat(service().applyMonthlyInterest()).isEqualTo(succeeded(0, NOW_MICROS));
-        }
-
-        @Test
-        void touchesNoIdempotencyKey() {
-            service().applyMonthlyInterest();
-
-            assertThat(calls).containsExactly("load", "save");
+            assertThat(deposits.balanceOf(1)).isEqualTo(1000.00);
         }
     }
 
     @Nested
-    @DisplayName("with a key: reserve, run, complete (P6, P9, P12)")
-    class WithKey {
+    @DisplayName("at most once per UTC calendar month (P3, P6, P8)")
+    class OncePerMonth {
 
         @Test
-        void purgesReservesRunsAndCompletesInThisOrder() {
+        void replaysTheMonthWithoutASecondRun() {
             deposits.store(new TimeDeposit(1, "basic", 1000.00, 31));
+            BalanceUpdateResult first = service().applyMonthlyInterest();
+            clock.set(Instant.parse("2026-11-30T23:59:59.999999Z"));
+            calls.clear();
 
-            assertThat(service().applyMonthlyInterest("k")).isEqualTo(succeeded(1, NOW_MICROS));
-
-            assertThat(calls).containsExactly("purge", "reserve", "lock", "load", "save", "complete");
-            assertThat(records.stateOf("k")).contains(new Completed(new BalanceUpdateOutcome(1, NOW_MICROS)));
-            assertThat(records.completedAtOf("k")).contains(NOW_MICROS);
+            assertThat(service().applyMonthlyInterest()).isEqualTo(first);
             assertThat(deposits.balanceOf(1)).isEqualTo(1000.83);
+            assertThat(calls).doesNotContain("load", "save");
         }
 
         @Test
-        void replaysACompletedKeyWithoutRunning() {
-            records.storeCompleted("k", STORED, NOW.minus(Duration.ofHours(1)));
+        void runsAgainInTheNextMonth() {
             deposits.store(new TimeDeposit(1, "basic", 1000.00, 31));
+            clock.set(Instant.parse("2026-10-15T12:00:00Z"));
+            service().applyMonthlyInterest();
+            clock.set(Instant.parse("2026-11-01T00:00:00Z"));
 
-            assertThat(service().applyMonthlyInterest("k")).isEqualTo(new Succeeded(STORED));
-            assertThat(calls).doesNotContain("load", "save");
-            assertThat(deposits.balanceOf(1)).isEqualTo(1000.00);
+            service().applyMonthlyInterest();
+
+            assertThat(deposits.balanceOf(1)).isEqualTo(1001.66);
+            assertThat(periods.periods()).containsExactlyInAnyOrder(OCTOBER, NOVEMBER);
         }
+
+        // ADR-0013, E1: a missed month is not applied later.
+        @Test
+        void appliesOnlyTheCurrentMonthAfterAMissedMonth() {
+            deposits.store(new TimeDeposit(1, "basic", 1000.00, 31));
+            periods.storeCompleted(YearMonth.of(2026, 9), STORED, Instant.parse("2026-09-15T00:00:00Z"));
+
+            service().applyMonthlyInterest();
+
+            assertThat(deposits.balanceOf(1)).isEqualTo(1000.83);
+            assertThat(periods.periods()).doesNotContain(OCTOBER);
+        }
+
+        // The month is truncated from the clock in UTC, never rounded, whatever zone the clock carries.
+        @ParameterizedTest(name = "{0} -> {1}")
+        @CsvSource({
+                "2026-10-31T23:59:59.999999Z, 2026-10",
+                "2026-10-31T23:59:59.999999999Z, 2026-10",
+                "2026-11-01T00:00:00Z, 2026-11"})
+        void takesTheUtcMonthOfTheReservation(String instant, String month) {
+            serviceWith(new MutableClock(Instant.parse(instant), ZoneId.of("Europe/Berlin"))).applyMonthlyInterest();
+
+            assertThat(periods.periods()).containsExactly(YearMonth.parse(month));
+        }
+
+        // ADR-0013: the run belongs to the month it reserved, even if it finishes after midnight.
+        @Test
+        void aRunReservedBeforeMidnightCompletesThatMonth() {
+            clock.set(Instant.parse("2026-10-31T23:59:59.999999Z"));
+            periods.beforeLock(() -> clock.advance(ONE_MICROSECOND));
+
+            assertThat(service().applyMonthlyInterest())
+                    .isEqualTo(succeeded(0, Instant.parse("2026-11-01T00:00:00Z")));
+            assertThat(periods.lockedPeriods()).containsExactly(OCTOBER);
+            assertThat(periods.periods()).containsExactly(OCTOBER);
+
+            periods.beforeLock(() -> { });
+            service().applyMonthlyInterest();
+            assertThat(periods.periods()).containsExactlyInAnyOrder(OCTOBER, NOVEMBER);
+        }
+    }
+
+    @Nested
+    @DisplayName("in progress and takeover (P9, P12, P15)")
+    class InProgressAndTakeover {
 
         @Test
         void conflictsOnAFreshReservation() {
-            Instant createdAt = NOW_MICROS.minus(Duration.ofMinutes(10)).plus(ONE_MICROSECOND);
-            records.storeInProgress("k", createdAt);
+            Instant token = NOW_MICROS.minus(Duration.ofMinutes(10)).plus(ONE_MICROSECOND);
+            periods.storeInProgress(NOVEMBER, token);
 
-            assertThat(service().applyMonthlyInterest("k")).isEqualTo(new KeyInProgress());
-            assertThat(records.stateOf("k")).contains(new InProgress(createdAt));
+            assertThat(service().applyMonthlyInterest()).isEqualTo(new MonthInProgress());
+            assertThat(periods.stateOf(NOVEMBER)).contains(new InProgress(token));
             assertThat(calls).doesNotContain("load");
         }
 
         // A locked row is a live run, however old: never taken over (ADR-0012, C).
         @Test
-        void conflictsWhenAnotherTransactionHoldsTheKey() {
-            records.storeInProgress("k", NOW_MICROS.minus(Duration.ofHours(1)));
-            records.lockByAnotherTransaction("k");
+        void conflictsWhenAnotherTransactionHoldsTheMonth() {
+            periods.storeInProgress(NOVEMBER, NOW_MICROS.minus(Duration.ofHours(1)));
+            periods.lockByAnotherTransaction(NOVEMBER);
 
-            assertThat(service().applyMonthlyInterest("k")).isEqualTo(new KeyInProgress());
+            assertThat(service().applyMonthlyInterest()).isEqualTo(new MonthInProgress());
             assertThat(calls).doesNotContain("takeOver", "load");
         }
 
         @Test
-        void takesOverAReservationThatIsExactlyTenMinutesOld() {
-            records.storeInProgress("k", NOW_MICROS.minus(Duration.ofMinutes(10)));
+        void takesOverAMonthReservedExactlyTenMinutesAgo() {
+            periods.storeInProgress(NOVEMBER, NOW_MICROS.minus(Duration.ofMinutes(10)));
 
-            assertThat(service().applyMonthlyInterest("k")).isEqualTo(succeeded(0, NOW_MICROS));
+            assertThat(service().applyMonthlyInterest()).isEqualTo(succeeded(0, NOW_MICROS));
             assertThat(calls).containsSubsequence("takeOver", "lock", "load", "complete");
         }
 
         @Test
-        void runsAgainForAKeyCompletedExactlyTwentyFourHoursAgo() {
-            records.storeCompleted("k", STORED, NOW_MICROS.minus(Duration.ofHours(24)));
+        void keepsCompletedEarlierMonths() {
+            periods.storeCompleted(YearMonth.of(2026, 9), STORED, Instant.parse("2026-09-15T00:00:00Z"));
+            periods.storeCompleted(OCTOBER, STORED, Instant.parse("2026-10-15T00:00:00Z"));
 
-            assertThat(service().applyMonthlyInterest("k")).isEqualTo(succeeded(0, NOW_MICROS));
+            service().applyMonthlyInterest();
+
+            assertThat(periods.stateOf(YearMonth.of(2026, 9))).contains(new Completed(STORED));
+            assertThat(periods.stateOf(OCTOBER)).contains(new Completed(STORED));
         }
 
-        @Test
-        void replaysAKeyCompletedJustUnderTwentyFourHoursAgo() {
-            records.storeCompleted("k", STORED, NOW_MICROS.minus(Duration.ofHours(24)).plus(ONE_MICROSECOND));
+        // P15: a past month left in progress counts as missed; it never blocks a later month and is never taken over.
+        @ParameterizedTest(name = "October locked by another transaction: {0}")
+        @ValueSource(booleans = {false, true})
+        void ignoresAPastMonthLeftInProgress(boolean locked) {
+            Instant token = Instant.parse("2026-10-31T23:00:00Z");
+            periods.storeInProgress(OCTOBER, token);
+            if (locked) {
+                periods.lockByAnotherTransaction(OCTOBER);
+            }
 
-            assertThat(service().applyMonthlyInterest("k")).isEqualTo(new Succeeded(STORED));
-        }
-
-        @Test
-        void purgesAbandonedReservationsOfOtherKeysFromTwentyFourHours() {
-            records.storeInProgress("abandoned", NOW_MICROS.minus(Duration.ofHours(24)));
-            records.storeInProgress("young", NOW_MICROS.minus(Duration.ofHours(24)).plus(ONE_MICROSECOND));
-            records.storeInProgress("locked", NOW_MICROS.minus(Duration.ofHours(48)));
-            records.lockByAnotherTransaction("locked");
-
-            service().applyMonthlyInterest("k");
-
-            assertThat(records.stateOf("abandoned")).isEmpty();
-            assertThat(records.stateOf("young")).isPresent();
-            assertThat(records.stateOf("locked")).isPresent();
+            assertThat(service().applyMonthlyInterest()).isEqualTo(succeeded(0, NOW_MICROS));
+            assertThat(periods.stateOf(OCTOBER)).contains(new InProgress(token));
+            assertThat(periods.lockedPeriods()).containsExactly(NOVEMBER);
         }
     }
 
@@ -194,64 +240,64 @@ class ApplyMonthlyInterestServiceTest {
     class Fence {
 
         @Test
-        void conflictsWhenTheKeyIsGone() {
-            records.beforeLock(() -> records.remove("k"));
+        void conflictsWhenTheMonthIsGone() {
+            periods.beforeLock(() -> periods.remove(NOVEMBER));
 
-            assertThat(service().applyMonthlyInterest("k")).isEqualTo(new KeyInProgress());
+            assertThat(service().applyMonthlyInterest()).isEqualTo(new MonthInProgress());
             assertThat(calls).doesNotContain("load", "save", "release");
         }
 
         @Test
-        void replaysWhenASuccessorCompletedTheKey() {
-            records.beforeLock(() -> records.storeCompleted("k", STORED, NOW));
+        void replaysWhenASuccessorCompletedTheMonth() {
+            periods.beforeLock(() -> periods.storeCompleted(NOVEMBER, STORED, NOW));
 
-            assertThat(service().applyMonthlyInterest("k")).isEqualTo(new Succeeded(STORED));
+            assertThat(service().applyMonthlyInterest()).isEqualTo(new Succeeded(STORED));
             assertThat(calls).doesNotContain("load", "save", "release");
         }
 
         @Test
-        void conflictsWhenASuccessorTookTheKeyOver() {
+        void conflictsWhenASuccessorTookTheMonthOver() {
             Instant foreignToken = NOW_MICROS.plus(Duration.ofMinutes(11));
-            records.beforeLock(() -> records.storeInProgress("k", foreignToken));
+            periods.beforeLock(() -> periods.storeInProgress(NOVEMBER, foreignToken));
 
-            assertThat(service().applyMonthlyInterest("k")).isEqualTo(new KeyInProgress());
-            assertThat(records.stateOf("k")).contains(new InProgress(foreignToken));
+            assertThat(service().applyMonthlyInterest()).isEqualTo(new MonthInProgress());
+            assertThat(periods.stateOf(NOVEMBER)).contains(new InProgress(foreignToken));
             assertThat(calls).doesNotContain("load", "save", "release");
         }
 
         @Test
         void failsAndReleasesWhenTheSwitchToCompletedMatchesNoRow() {
-            records.letCompleteMatchNothing();
+            periods.letCompleteMatchNothing();
 
-            assertThatIllegalStateException().isThrownBy(() -> service().applyMonthlyInterest("k"));
+            assertThatIllegalStateException().isThrownBy(() -> service().applyMonthlyInterest());
             assertThat(calls).endsWith("complete", "release");
         }
     }
 
     @Nested
-    @DisplayName("failures release the reservation, so a retry runs (P9, P11)")
+    @DisplayName("failures release the month, so a retry runs (P9, P11)")
     class Failures {
 
         @Test
-        void releasesTheKeyWhenTheRunFails() {
+        void releasesTheMonthWhenTheRunFails() {
             deposits.store(new TimeDeposit(1, "basic", 1000.00, 31));
             RuntimeException failure = new IllegalStateException("save failed");
             deposits.failOnSave(failure);
 
-            assertThatThrownBy(() -> service().applyMonthlyInterest("k")).isSameAs(failure);
-            assertThat(records.stateOf("k")).isEmpty();
+            assertThatThrownBy(() -> service().applyMonthlyInterest()).isSameAs(failure);
+            assertThat(periods.stateOf(NOVEMBER)).isEmpty();
 
             deposits.failOnSave(null);
-            assertThat(service().applyMonthlyInterest("k")).isEqualTo(succeeded(1, NOW_MICROS));
+            assertThat(service().applyMonthlyInterest()).isEqualTo(succeeded(1, NOW_MICROS));
             assertThat(deposits.balanceOf(1)).isEqualTo(1000.83);
         }
 
         @Test
-        void releasesTheKeyWhenLockingItFails() {
-            records.failOnLock(new IllegalStateException("database unreachable"));
+        void releasesTheMonthWhenLockingItFails() {
+            periods.failOnLock(new IllegalStateException("database unreachable"));
 
-            assertThatIllegalStateException().isThrownBy(() -> service().applyMonthlyInterest("k"));
-            assertThat(records.stateOf("k")).isEmpty();
+            assertThatIllegalStateException().isThrownBy(() -> service().applyMonthlyInterest());
+            assertThat(periods.stateOf(NOVEMBER)).isEmpty();
         }
 
         @Test
@@ -259,19 +305,11 @@ class ApplyMonthlyInterestServiceTest {
             RuntimeException failure = new IllegalStateException("save failed");
             RuntimeException releaseFailure = new IllegalStateException("release failed");
             deposits.failOnSave(failure);
-            records.failOnRelease(releaseFailure);
+            periods.failOnRelease(releaseFailure);
 
-            assertThatThrownBy(() -> service().applyMonthlyInterest("k"))
+            assertThatThrownBy(() -> service().applyMonthlyInterest())
                     .isSameAs(failure)
                     .satisfies(thrown -> assertThat(thrown.getSuppressed()).containsExactly(releaseFailure));
-        }
-
-        @Test
-        void releasesNothingWithoutAKey() {
-            deposits.failOnSave(new IllegalStateException("save failed"));
-
-            assertThatIllegalStateException().isThrownBy(() -> service().applyMonthlyInterest());
-            assertThat(calls).doesNotContain("release");
         }
     }
 }

@@ -6,15 +6,13 @@ import org.ikigaidigital.shared.adapter.in.rest.model.BalanceUpdateDto;
 import org.ikigaidigital.shared.adapter.in.rest.model.TimeDepositDto;
 import org.ikigaidigital.shared.adapter.in.rest.model.WithdrawalDto;
 import org.ikigaidigital.timedeposit.application.model.BalanceUpdateOutcome;
-import org.ikigaidigital.timedeposit.application.model.BalanceUpdateResult;
-import org.ikigaidigital.timedeposit.application.model.BalanceUpdateResult.KeyInProgress;
+import org.ikigaidigital.timedeposit.application.model.BalanceUpdateResult.MonthInProgress;
 import org.ikigaidigital.timedeposit.application.model.BalanceUpdateResult.Succeeded;
 import org.ikigaidigital.timedeposit.application.model.TimeDepositView;
 import org.ikigaidigital.timedeposit.application.model.WithdrawalView;
 import org.ikigaidigital.timedeposit.application.port.in.ApplyMonthlyInterestUseCase;
 import org.ikigaidigital.timedeposit.application.port.in.ListTimeDepositsUseCase;
 import org.ikigaidigital.timedeposit.domain.TimeDepositTerms;
-import org.jspecify.annotations.Nullable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
@@ -49,19 +47,16 @@ class TimeDepositsController implements TimeDepositsApi {
                 .toList());
     }
 
-    // A missing header means "apply again" (ADR-0004); the key's length (1-255) is checked by the generated interface
-    // before this method runs. An in-progress key is the contract's 409: ErrorResponseException is rendered as
-    // Problem Details by Spring Boot's handler, like Spring MVC's own errors (ADR-0003), so no extra advice is needed.
+    // At most once per UTC calendar month (ADR-0013): the month's outcome, or the contract's 409 while its run is in
+    // progress. ErrorResponseException is rendered as Problem Details by Spring Boot's handler, like Spring MVC's own
+    // errors (ADR-0003), so no extra advice is needed.
     @Override
-    public ResponseEntity<BalanceUpdateDto> createBalanceUpdate(@Nullable String idempotencyKey) {
-        BalanceUpdateResult result = idempotencyKey == null
-                ? applyMonthlyInterest.applyMonthlyInterest()
-                : applyMonthlyInterest.applyMonthlyInterest(idempotencyKey);
-        return switch (result) {
+    public ResponseEntity<BalanceUpdateDto> createBalanceUpdate() {
+        return switch (applyMonthlyInterest.applyMonthlyInterest()) {
             case Succeeded succeeded -> ResponseEntity.ok(toBalanceUpdate(succeeded.outcome()));
-            case KeyInProgress keyInProgress -> throw new ErrorResponseException(HttpStatus.CONFLICT,
+            case MonthInProgress monthInProgress -> throw new ErrorResponseException(HttpStatus.CONFLICT,
                     ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT,
-                            "A request with this Idempotency-Key is still being processed."), null);
+                            "A balance update for this month is still in progress."), null);
         };
     }
 

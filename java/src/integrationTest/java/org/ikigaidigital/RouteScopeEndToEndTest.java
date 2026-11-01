@@ -55,7 +55,7 @@ class RouteScopeEndToEndTest {
     @BeforeEach
     void seedOneDeposit() {
         jdbc = JdbcClient.create(dataSource);
-        jdbc.sql("truncate \"withdrawals\", \"timeDeposits\", \"idempotencyKeys\" restart identity").update();
+        jdbc.sql("truncate \"withdrawals\", \"timeDeposits\", \"balanceUpdatePeriods\" restart identity").update();
         deposit = new TimeDepositRows(jdbc).insertDeposit("basic", 31, "1000.00");
     }
 
@@ -219,7 +219,7 @@ class RouteScopeEndToEndTest {
         EntityExchangeResult<byte[]> result = exchange(HttpMethod.OPTIONS, path,
                 ORIGIN, "http://localhost:8081",
                 ACCESS_CONTROL_REQUEST_METHOD, "POST",
-                ACCESS_CONTROL_REQUEST_HEADERS, "idempotency-key");
+                ACCESS_CONTROL_REQUEST_HEADERS, "content-type");
 
         assertNotFoundProblem(result);
     }
