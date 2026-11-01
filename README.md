@@ -12,8 +12,10 @@ The solution is the Java implementation in [`java/`](java/). Design decisions ar
 | `TimeDeposit` and `updateBalance` unchanged | `TimeDepositCalculator` keeps its signature and delegates | Characterization tests, frozen legacy copy, randomized comparison |
 | Hexagonal architecture, SOLID | ADR-0008 | ArchUnit rules |
 | Concurrent and repeated balance updates | ADR-0012 (row locks, optional `Idempotency-Key`) | Persistence lock tests, end-to-end overlap tests |
-| Assumptions and kept legacy defects | Code comments, ADRs, [`docs/known-issues.md`](docs/known-issues.md) | Pinned by tests |
+| Assumptions and kept legacy defects | Code comments, ADRs, [`docs/known-issues.md`](docs/known-issues.md) | Pinned by tests, as marked in `known-issues.md` |
 | AI-assisted development | [`AI_USAGE.md`](AI_USAGE.md), [`CLAUDE.md`](CLAUDE.md), [`.claude/`](.claude/) | – |
+
+The scenarios behind the tests are listed in [`docs/testing.md`](docs/testing.md).
 
 Assumption: the API's `id` is a public UUID; the table keeps the brief's integer `id` as an internal key that is
 never exposed (ADR-0004).
