@@ -70,9 +70,9 @@ Defined in ADR-0008 (the source of truth; any deviation needs a new ADR). Summar
 ### Approval and interaction
 1. Never change files, dependencies or git state without approval. Read-only inspection is fine.
 2. Approval is per step: an approved `/step` plan covers its routine actions (writing tests, refactors inside a
-   class, local edits). Show the diff and ask explicitly before each commit, and ask before pushes and PRs and
-   before anything that affects the API contract, the DB schema, `TimeDeposit`, `updateBalance` behaviour, a new
-   dependency, or a deviation from the brief. Git state changes still prompt as configured in
+   class, local edits). Show the diff and ask explicitly before each commit; invoking `/ship` approves its push and
+   PR (other pushes and PRs ask); ask before anything that affects the API contract, the DB schema, `TimeDeposit`,
+   `updateBalance` behaviour, a new dependency, or a deviation from the brief. Git state changes still prompt as configured in
    `.claude/settings.json`.
 3. Ask decisions as selectable interview questions (2–4 options, recommendation marked first). Start every
    increment by proposing 2–4 candidate `/step <branch> <goal>` invocations as options; `/step` creates the branch
