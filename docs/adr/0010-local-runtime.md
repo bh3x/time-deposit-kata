@@ -1,6 +1,6 @@
 # ADR-0010: Local runtime with Docker Compose
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-11-01
 
 ## Context
