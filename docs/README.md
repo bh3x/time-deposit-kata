@@ -5,6 +5,7 @@
 | [`architecture/overview.md`](architecture/overview.md) | Architecture overview (C4 levels 1–3, Mermaid diagrams) |
 | [`adr/`](adr/README.md) | Architecture Decision Records — why the system looks the way it does |
 | [`../java/src/main/resources/openapi/openapi.yaml`](../java/src/main/resources/openapi/openapi.yaml) | API contract, contract-first ([ADR-0002](adr/0002-contract-first-openapi.md), [ADR-0003](adr/0003-api-conventions.md), [ADR-0004](adr/0004-time-deposit-api-design.md)) |
+| [`known-issues.md`](known-issues.md) | Known defects that are deliberately kept, e.g. in the legacy interest calculation |
 | [`../AI_USAGE.md`](../AI_USAGE.md) | AI-assisted development setup |
 
 **Reading order:** overview → ADRs → API contract.
