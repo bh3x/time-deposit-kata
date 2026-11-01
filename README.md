@@ -7,7 +7,7 @@ The solution is the Java implementation in [`java/`](java/). Design decisions ar
 | Requirement | Where | Verified by |
 |---|---|---|
 | Exactly two endpoints (list, balance update) | Contract [`openapi.yaml`](java/src/main/resources/openapi/openapi.yaml); `TimeDepositsController`; ADR-0002–0005 | Web slice, end-to-end tests; route probes and a route inventory (no other HTTP route) |
-| Tables `timeDeposits`, `withdrawals` | Flyway [`db/migration`](java/src/main/resources/db/migration); ADR-0006 | Schema and persistence tests (Testcontainers) |
+| Tables `timeDeposits`, `withdrawals` | Flyway [`db/migration`](java/src/main/resources/db/migration); current model in [`data-model.md`](docs/architecture/data-model.md); ADR-0006 | Schema and persistence tests (Testcontainers) |
 | Interest rules, extensible to new plans | `timedeposit.domain.interest`; ADR-0011 | Policy and registry unit tests; extensibility test |
 | `TimeDeposit` and `updateBalance` unchanged | `TimeDepositCalculator` keeps its signature and delegates | Characterization tests, frozen legacy copy, randomized comparison |
 | Hexagonal architecture, SOLID | ADR-0008 | ArchUnit rules |

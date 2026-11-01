@@ -120,6 +120,8 @@ At most one run per UTC calendar month (ADR-0013), with ADR-0012's serialisation
 (`SKIP LOCKED`), stale takeover, fence and release keyed by the month; a failing deposit aborts the whole run.
 
 ## 5. Cross-cutting concerns
+- **Data model:** tables, columns, constraints and the Java mapping as they are today:
+  [data-model.md](data-model.md).
 - **Money:** stored as `NUMERIC(15,2)` (ADR-0006); the legacy domain computes in `Double`; the persistence adapter
   reads with `BigDecimal.doubleValue()` and writes with `BigDecimal.valueOf(..).setScale(2, HALF_UP)`; the API
   shows decimal strings with two fraction digits (ADR-0004).
@@ -142,6 +144,6 @@ At most one run per UTC calendar month (ADR-0013), with ADR-0012's serialisation
 | API conventions, errors | [ADR-0003](../adr/0003-api-conventions.md) |
 | Time deposit API design | [ADR-0004](../adr/0004-time-deposit-api-design.md) |
 | Endpoint scope | [ADR-0005](../adr/0005-endpoint-scope.md) |
-| Data model | [ADR-0006](../adr/0006-data-model.md) |
+| Data model (current state: [data-model.md](data-model.md)) | [ADR-0006](../adr/0006-data-model.md), [ADR-0013](../adr/0013-interest-periods.md) |
 | Technology stack and build | [ADR-0007](../adr/0007-technology-stack-and-build.md) |
 | Hexagonal architecture | [ADR-0008](../adr/0008-hexagonal-architecture.md) |
