@@ -30,7 +30,10 @@ public interface RecordBalanceUpdatePort {
      */
     Optional<BalanceUpdatePeriodState> findUnlocked(YearMonth period);
 
-    /** Gives the in-progress month, which the caller's transaction holds locked, a new token. */
+    /**
+     * Gives the in-progress month, which the caller's transaction holds locked, a new token; throws
+     * {@link IllegalStateException} and changes nothing if the month is missing or completed.
+     */
     void takeOver(YearMonth period, Instant token);
 
     /**
