@@ -37,10 +37,17 @@ final class RecordingDataSource extends DelegatingDataSource {
         return recording(super.getConnection(username, password));
     }
 
-    // Every prepareStatement and prepareCall overload takes the SQL as its first argument.
+    // Every prepareStatement and prepareCall overload takes the SQL as its first argument. equals and hashCode keep
+    // the proxy's own identity, as Spring expects when it compares connections.
     private Connection recording(Connection target) {
         return (Connection) Proxy.newProxyInstance(RecordingDataSource.class.getClassLoader(),
                 new Class<?>[] {Connection.class}, (proxy, method, args) -> {
+                    if (method.getName().equals("equals")) {
+                        return proxy == args[0];
+                    }
+                    if (method.getName().equals("hashCode")) {
+                        return System.identityHashCode(proxy);
+                    }
                     if (method.getName().startsWith("prepare") && args != null && args[0] instanceof String sql) {
                         statements.add(sql);
                     }

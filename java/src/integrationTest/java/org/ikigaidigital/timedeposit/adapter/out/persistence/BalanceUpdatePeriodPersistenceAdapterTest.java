@@ -227,7 +227,8 @@ class BalanceUpdatePeriodPersistenceAdapterTest {
         }
 
         // PostgreSQL accepts `"executedAt"from` only because the last column is quoted, so the results cannot show a
-        // missing space; the statement text can. Reads a month without a row, so nothing needs a rollback.
+        // missing space; the statement text can. The reads run in autocommit outside the test transaction, so any
+        // row lock ends with its statement and nothing needs a rollback.
         @ParameterizedTest(name = "{0}")
         @MethodSource("stateQueries")
         void separatesTheColumnListFromTheFromClause(Consumer<BalanceUpdatePeriodPersistenceAdapter> query) {
