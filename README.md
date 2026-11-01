@@ -38,8 +38,9 @@ Both ports are published on `localhost` only.
    `Idempotency-Key` (repeating a key returns the first outcome instead of applying interest again) → **Execute**.
    Then run step 2 again to see the new balances.
 
-> **Current state:** the balance update is implemented in a later step. Until then `POST /balance-updates`
-> answers `500` with a Problem Details body.
+   The response is `200` with `processedCount` (all deposits, including unchanged ones) and `executedAt` (UTC).
+   Repeating a key whose request is still running gives `409`; a key longer than 255 characters or empty gives `400`.
+   Each call without a key applies one more month of interest; runs never overlap (ADR-0012).
 
 ### Trigger the endpoints with curl
 ```bash

@@ -199,7 +199,8 @@ class TimeDepositsControllerTest {
         }
 
         // P7: the contract defines length only, so a whitespace-only key is valid; the key is passed on unchanged.
-        // Assumption: whether Tomcat trims a whitespace-only header value is not verified here (MockMvc does not).
+        // Over real HTTP, surrounding whitespace is not part of a header value (RFC 9110): a whitespace-only key
+        // arrives empty (400) and " a " arrives as "a" (observed against the Compose stack). MockMvc passes it as is.
         @ParameterizedTest(name = "key of length {0} accepted")
         @ValueSource(ints = {1, 255})
         void passesAKeyOfAllowedLengthUnchanged(int length) {
