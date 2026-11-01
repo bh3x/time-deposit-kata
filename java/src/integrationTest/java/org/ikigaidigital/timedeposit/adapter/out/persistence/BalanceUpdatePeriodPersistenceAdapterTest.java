@@ -23,6 +23,7 @@ import java.time.YearMonth;
 import java.time.ZoneOffset;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatIllegalStateException;
 
 /**
  * The balance update period queries of ADR-0013 against PostgreSQL, within one transaction per test (scenarios P6,
@@ -118,15 +119,55 @@ class BalanceUpdatePeriodPersistenceAdapterTest {
             assertThat(adapter.findUnlocked(NOVEMBER)).isEmpty();
             assertThat(adapter.lock(NOVEMBER)).isEmpty();
         }
+    }
 
+    @Nested
+    @DisplayName("ADR-0012/0014: take over only an in-progress month")
+    class TakeOver {
+
+        private int rowCount() {
+            return jdbc.sql("select count(*) from \"balanceUpdatePeriods\"").query(Integer.class).single();
+        }
+
+        // The October row, also in progress, shows that only the named month gets the new token.
         @Test
         void takesOverAnInProgressMonthWithANewToken() {
+            insertInProgress(OCTOBER, OTHER_TOKEN);
             insertInProgress(NOVEMBER, OTHER_TOKEN);
             adapter.findUnlocked(NOVEMBER);
 
             adapter.takeOver(NOVEMBER, TOKEN);
 
             assertThat(adapter.lock(NOVEMBER)).contains(new InProgress(TOKEN));
+            assertThat(adapter.find(OCTOBER)).contains(new InProgress(OTHER_TOKEN));
+        }
+
+        // The October row catches an update that matches by status but not by month: it would change one row and
+        // not throw.
+        @Test
+        void refusesToTakeOverAMissingMonth() {
+            insertInProgress(OCTOBER, OTHER_TOKEN);
+
+            assertThatIllegalStateException().isThrownBy(() -> adapter.takeOver(NOVEMBER, TOKEN))
+                    .withMessageContaining("2026-11");
+
+            assertThat(exists(NOVEMBER)).isFalse();
+            assertThat(adapter.find(OCTOBER)).contains(new InProgress(OTHER_TOKEN));
+            assertThat(rowCount()).isOne();
+        }
+
+        @Test
+        void refusesToTakeOverACompletedMonth() {
+            insertCompleted(NOVEMBER, OUTCOME.executedAt());
+
+            assertThatIllegalStateException().isThrownBy(() -> adapter.takeOver(NOVEMBER, TOKEN))
+                    .withMessageContaining("2026-11");
+
+            assertThat(adapter.find(NOVEMBER)).contains(new Completed(OUTCOME));
+            assertThat(jdbc.sql("""
+                    select "createdAt" from "balanceUpdatePeriods" where "period" = date '2026-11-01'
+                    """).query(OffsetDateTime.class).single().toInstant()).isEqualTo(OUTCOME.executedAt());
+            assertThat(rowCount()).isOne();
         }
     }
 
