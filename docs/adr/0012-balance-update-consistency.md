@@ -1,6 +1,6 @@
 # ADR-0012: Balance update consistency
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-11-01
 
 ## Context

@@ -25,7 +25,7 @@ An ADR captures one significant decision: its context, the options considered, t
 | [0009](0009-testing-strategy.md) | Testing strategy | Accepted | 2026-10-31 |
 | [0010](0010-local-runtime.md) | Local runtime with Docker Compose | Accepted | 2026-11-01 |
 | [0011](0011-interest-calculation-design.md) | Interest calculation design | Accepted | 2026-11-01 |
-| [0012](0012-balance-update-consistency.md) | Balance update consistency | Proposed | 2026-11-01 |
+| [0012](0012-balance-update-consistency.md) | Balance update consistency | Accepted | 2026-11-01 |
 
 ## Planned decisions
 Numbers are assigned when each ADR is written.
