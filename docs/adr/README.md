@@ -23,6 +23,7 @@ An ADR captures one significant decision: its context, the options considered, t
 | [0007](0007-technology-stack-and-build.md) | Technology stack and build | Accepted | 2026-10-31 |
 | [0008](0008-hexagonal-architecture.md) | Hexagonal architecture | Accepted | 2026-10-31 |
 | [0009](0009-testing-strategy.md) | Testing strategy | Accepted | 2026-10-31 |
+| [0010](0010-local-runtime.md) | Local runtime with Docker Compose | Proposed | 2026-11-01 |
 
 ## Planned decisions
 Numbers are assigned when each ADR is written.
