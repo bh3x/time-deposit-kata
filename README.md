@@ -20,8 +20,17 @@ once the log shows `Started TimeDepositApplication`.
 | API | http://localhost:8080/api/v1 | The two operations of the contract |
 | PostgreSQL | inside the stack only | Schema created by Flyway; demo data loaded on startup |
 
+Both ports are published on `localhost` only.
+
+### Verify the stack (smoke check)
+- `docker compose ps` lists `postgres` as healthy and `app` and `swagger-ui` as running.
+- `curl http://localhost:8080/api/v1/time-deposits` returns a JSON array of 15 demo deposits.
+- http://localhost:8081 shows the "XA Bank Time Deposit API" contract.
+- `curl -i http://localhost:8080/actuator/health` returns `404`: the application serves only the two operations.
+
 ### Trigger the endpoints with Swagger UI
-1. Open http://localhost:8081. The contract (`openapi.yaml`) is loaded; keep the server
+1. Open http://localhost:8081 (use `localhost`, not `127.0.0.1`: the API allows cross-origin calls from
+   `http://localhost:8081` only). The contract (`openapi.yaml`) is loaded; keep the server
    **`http://localhost:8080/api/v1` (Local Docker Compose stack)** selected.
 2. **List all time deposits:** expand `GET /time-deposits` → **Try it out** → **Execute**. The response is a JSON
    array of deposits with `id`, `planType`, `balance`, `days` and `withdrawals`.
@@ -35,8 +44,9 @@ once the log shows `Started TimeDepositApplication`.
 ### Trigger the endpoints with curl
 ```bash
 curl http://localhost:8080/api/v1/time-deposits
-curl -X POST -H 'Idempotency-Key: 6c5f1d2e-4a8b-4c3d-9e7f-1a2b3c4d5e6f' http://localhost:8080/api/v1/balance-updates
+curl -X POST -H "Idempotency-Key: $(uuidgen)" http://localhost:8080/api/v1/balance-updates
 ```
+A new key per call applies interest again; reusing a key returns the first outcome. The header is optional.
 
 ### Stop and reset
 - `docker compose down` stops the stack; the database volume and its balances are kept.
@@ -46,7 +56,9 @@ curl -X POST -H 'Idempotency-Key: 6c5f1d2e-4a8b-4c3d-9e7f-1a2b3c4d5e6f' http://l
 - The application serves only the two API operations; Swagger UI runs as a separate container (ADR-0005), which
   the API allows as a cross-origin caller (`app.cors.allowed-origins`, ADR-0010).
 - Run the application without Docker against your own PostgreSQL: `cd java && ./gradlew bootRun` with
-  `SPRING_DATASOURCE_URL`, `SPRING_DATASOURCE_USERNAME`, `SPRING_DATASOURCE_PASSWORD` set (JDK 25 required).
+  `SPRING_DATASOURCE_URL`, `SPRING_DATASOURCE_USERNAME` and `SPRING_DATASOURCE_PASSWORD` set, plus
+  `SPRING_PROFILES_ACTIVE=demo` for the demo data (without it the list starts empty). Gradle needs a JDK 17 or
+  newer to start; it downloads the JDK 25 toolchain itself if none is installed.
 - Tests: `cd java && ./gradlew check` runs the unit, architecture and integration tests (Docker required for
   Testcontainers). See [`docs/testing.md`](docs/testing.md).
 
