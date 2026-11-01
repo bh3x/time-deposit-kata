@@ -6,9 +6,11 @@ import org.ikigaidigital.timedeposit.application.model.BalanceUpdatePeriodState.
 import org.ikigaidigital.timedeposit.application.model.BalanceUpdatePeriodState.InProgress;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Named;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
@@ -21,6 +23,8 @@ import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.YearMonth;
 import java.time.ZoneOffset;
+import java.util.function.Consumer;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatIllegalStateException;
@@ -207,6 +211,33 @@ class BalanceUpdatePeriodPersistenceAdapterTest {
             jdbc.sql("set local timezone to '" + timeZone + "'").update();
 
             assertThat(adapter.find(NOVEMBER)).contains(new Completed(OUTCOME));
+        }
+    }
+
+    @Nested
+    @DisplayName("SQL sent to PostgreSQL")
+    class SqlText {
+
+        static Stream<Named<Consumer<BalanceUpdatePeriodPersistenceAdapter>>> stateQueries() {
+            return Stream.of(
+                    Named.<Consumer<BalanceUpdatePeriodPersistenceAdapter>>of("find", it -> it.find(NOVEMBER)),
+                    Named.<Consumer<BalanceUpdatePeriodPersistenceAdapter>>of("findUnlocked",
+                            it -> it.findUnlocked(NOVEMBER)),
+                    Named.<Consumer<BalanceUpdatePeriodPersistenceAdapter>>of("lock", it -> it.lock(NOVEMBER)));
+        }
+
+        // PostgreSQL accepts `"executedAt"from` only because the last column is quoted, so the results cannot show a
+        // missing space; the statement text can. Reads a month without a row, so nothing needs a rollback.
+        @ParameterizedTest(name = "{0}")
+        @MethodSource("stateQueries")
+        void separatesTheColumnListFromTheFromClause(Consumer<BalanceUpdatePeriodPersistenceAdapter> query) {
+            RecordingDataSource recording = new RecordingDataSource(dataSource);
+
+            query.accept(new BalanceUpdatePeriodPersistenceAdapter(JdbcClient.create(recording)));
+
+            assertThat(recording.statements()).isNotEmpty().allSatisfy(sql ->
+                    assertThat(sql.strip().replaceAll("\\s+", " "))
+                            .contains(" from \"balanceUpdatePeriods\" where \"period\" = "));
         }
     }
 
