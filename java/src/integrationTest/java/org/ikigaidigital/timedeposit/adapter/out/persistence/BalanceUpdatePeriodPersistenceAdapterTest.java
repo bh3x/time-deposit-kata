@@ -131,6 +131,45 @@ class BalanceUpdatePeriodPersistenceAdapterTest {
     }
 
     @Nested
+    @DisplayName("P16: find without a lock")
+    class Find {
+
+        @Test
+        void findsAMonthInProgressWithItsToken() {
+            insertInProgress(NOVEMBER, TOKEN);
+
+            assertThat(adapter.find(NOVEMBER)).contains(new InProgress(TOKEN));
+        }
+
+        @Test
+        void findsACompletedMonthWithItsOutcome() {
+            insertCompleted(NOVEMBER, OUTCOME.executedAt());
+
+            assertThat(adapter.find(NOVEMBER)).contains(new Completed(OUTCOME));
+        }
+
+        @Test
+        void findsAMonthByItsPeriodOnly() {
+            insertInProgress(OCTOBER, OTHER_TOKEN);
+            insertCompleted(NOVEMBER.plusMonths(1), OUTCOME.executedAt());
+
+            assertThat(adapter.find(OCTOBER)).contains(new InProgress(OTHER_TOKEN));
+            assertThat(adapter.find(NOVEMBER.plusMonths(1))).contains(new Completed(OUTCOME));
+            assertThat(adapter.find(NOVEMBER)).isEmpty();
+        }
+
+        // The month is bound as a DATE, so the session time zone must not shift the lookup by a day.
+        @ParameterizedTest(name = "session time zone {0}")
+        @ValueSource(strings = {"Pacific/Kiritimati", "Pacific/Pago_Pago"})
+        void findsTheMonthWhateverTheSessionTimeZone(String timeZone) {
+            insertCompleted(NOVEMBER, OUTCOME.executedAt());
+            jdbc.sql("set local timezone to '" + timeZone + "'").update();
+
+            assertThat(adapter.find(NOVEMBER)).contains(new Completed(OUTCOME));
+        }
+    }
+
+    @Nested
     @DisplayName("P6/P12/P13: complete and release only the own month and token")
     class CompleteAndRelease {
 

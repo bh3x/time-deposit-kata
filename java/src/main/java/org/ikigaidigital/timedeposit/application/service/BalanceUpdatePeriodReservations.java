@@ -60,7 +60,19 @@ public class BalanceUpdatePeriodReservations {
         if (periods.reserve(period, token)) {
             return new Reservation.Reserved(period, token);
         }
-        // Empty: a live run holds the row locked, or it was deleted meanwhile; a retry decides again.
+        // A completed month is final, so it is read without a lock: a concurrent request holding the row locked must
+        // not turn its replay into a 409 (ADR-0014). Empty: released meanwhile; a retry decides again.
+        return switch (periods.find(period).orElse(null)) {
+            case null -> new Reservation.Busy();
+            case Completed completed -> new Reservation.Replay(completed.outcome());
+            case InProgress inProgress -> reserveInProgress(period, token);
+        };
+    }
+
+    // Only a locked in-progress row is a live run (ADR-0014). Empty: a live run holds the row locked, or it was
+    // released meanwhile. Completed: its run finished after the read above. If that row is already locked again by
+    // a request that also read it in progress, this request gets 409 although the month is done (accepted, ADR-0014).
+    private Reservation reserveInProgress(YearMonth period, Instant token) {
         return periods.findUnlocked(period).<Reservation>map(state -> switch (state) {
             case Completed completed -> new Reservation.Replay(completed.outcome());
             case InProgress inProgress when isStale(inProgress, token) -> {

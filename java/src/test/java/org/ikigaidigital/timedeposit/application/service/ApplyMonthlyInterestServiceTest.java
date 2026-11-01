@@ -236,6 +236,66 @@ class ApplyMonthlyInterestServiceTest {
     }
 
     @Nested
+    @DisplayName("a completed month is replayed without a lock (P16)")
+    class CompletedMonthWithoutLock {
+
+        // ADR-0014: a concurrent request of the month may hold the completed row locked; it is still the month's
+        // outcome, not a run in progress.
+        @Test
+        void replaysACompletedMonthLockedByAnotherTransaction() {
+            Instant completedAt = Instant.parse("2026-11-01T08:00:01Z");
+            periods.storeCompleted(NOVEMBER, STORED, completedAt);
+            periods.lockByAnotherTransaction(NOVEMBER);
+
+            assertThat(service().applyMonthlyInterest()).isEqualTo(new Succeeded(STORED));
+            assertThat(calls).doesNotContain("takeOver", "lock", "load", "save", "complete", "release");
+            assertThat(periods.stateOf(NOVEMBER)).contains(new Completed(STORED));
+            assertThat(periods.completedAtOf(NOVEMBER)).contains(completedAt);
+        }
+
+        // The cause of the wrong 409: a replay must never take the row lock, so replays cannot make each other skip.
+        @Test
+        void replaysACompletedMonthWithoutLockingIt() {
+            periods.storeCompleted(NOVEMBER, STORED, Instant.parse("2026-11-01T08:00:01Z"));
+
+            for (int request = 0; request < 3; request++) {
+                assertThat(service().applyMonthlyInterest()).isEqualTo(new Succeeded(STORED));
+            }
+            assertThat(calls).containsOnly("reserve", "find");
+        }
+
+        @Test
+        void conflictsWhenTheMonthIsReleasedBetweenReserveAndRead() {
+            periods.storeInProgress(NOVEMBER, NOW_MICROS.minus(Duration.ofMinutes(1)));
+            periods.beforeFind(() -> periods.remove(NOVEMBER));
+
+            assertThat(service().applyMonthlyInterest()).isEqualTo(new MonthInProgress());
+            assertThat(calls).doesNotContain("findUnlocked", "load");
+        }
+
+        @Test
+        void replaysWhenTheRunCompletesBetweenTheReadAndTheLock() {
+            periods.storeInProgress(NOVEMBER, NOW_MICROS.minus(Duration.ofMinutes(1)));
+            periods.beforeFindUnlocked(() -> periods.storeCompleted(NOVEMBER, STORED, NOW_MICROS));
+
+            assertThat(service().applyMonthlyInterest()).isEqualTo(new Succeeded(STORED));
+            assertThat(calls).doesNotContain("takeOver", "load");
+        }
+
+        // The window ADR-0014 accepts: the run was in progress when this request read the month.
+        @Test
+        void conflictsWhenTheRunCompletesAndIsLockedBetweenTheReadAndTheLock() {
+            periods.storeInProgress(NOVEMBER, NOW_MICROS.minus(Duration.ofMinutes(1)));
+            periods.beforeFindUnlocked(() -> {
+                periods.storeCompleted(NOVEMBER, STORED, NOW_MICROS);
+                periods.lockByAnotherTransaction(NOVEMBER);
+            });
+
+            assertThat(service().applyMonthlyInterest()).isEqualTo(new MonthInProgress());
+        }
+    }
+
+    @Nested
     @DisplayName("fence: a successor acted between reservation and run (P13)")
     class Fence {
 

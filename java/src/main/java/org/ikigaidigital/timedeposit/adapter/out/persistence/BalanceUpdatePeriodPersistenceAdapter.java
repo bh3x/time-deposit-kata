@@ -50,6 +50,14 @@ class BalanceUpdatePeriodPersistenceAdapter implements RecordBalanceUpdatePort {
                 """).param("period", period.atDay(1)).param("token", utc(token)).update() == 1;
     }
 
+    // No locking clause: a plain SELECT in PostgreSQL neither takes a row lock nor waits for one (ADR-0014).
+    @Override
+    public Optional<BalanceUpdatePeriodState> find(YearMonth period) {
+        return jdbc.sql("select " + STATE_COLUMNS + """
+                 from "balanceUpdatePeriods" where "period" = :period""")
+                .param("period", period.atDay(1)).query(STATE).optional();
+    }
+
     @Override
     public Optional<BalanceUpdatePeriodState> findUnlocked(YearMonth period) {
         return jdbc.sql("select " + STATE_COLUMNS + """

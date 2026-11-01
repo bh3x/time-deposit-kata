@@ -20,7 +20,8 @@ import java.util.Set;
  * In-memory balance update periods for application tests (ADR-0009), with the semantics the persistence tests pin for
  * the real queries: token-filtered completion and release, rows "locked by another transaction" that lookups skip,
  * no purge. Hooks and failures let tests play the races of ADR-0012/0013 (a successor acting between reservation and
- * run) deterministically. Calls go to a shared log; the months passed to {@code lock} are recorded.
+ * run, or a run completing between the reservation's reads) deterministically. Calls go to a shared log; the months
+ * passed to {@code lock} are recorded.
  */
 public final class InMemoryBalanceUpdatePeriods implements RecordBalanceUpdatePort {
 
@@ -31,6 +32,8 @@ public final class InMemoryBalanceUpdatePeriods implements RecordBalanceUpdatePo
     private final Set<YearMonth> lockedByAnotherTransaction = new HashSet<>();
     private final List<YearMonth> lockedPeriods = new ArrayList<>();
     private final List<String> calls;
+    private Runnable beforeFind = () -> { };
+    private Runnable beforeFindUnlocked = () -> { };
     private Runnable beforeLock = () -> { };
     private RuntimeException lockFailure;
     private RuntimeException releaseFailure;
@@ -72,6 +75,14 @@ public final class InMemoryBalanceUpdatePeriods implements RecordBalanceUpdatePo
         return List.copyOf(lockedPeriods);
     }
 
+    public void beforeFind(Runnable hook) {
+        this.beforeFind = hook;
+    }
+
+    public void beforeFindUnlocked(Runnable hook) {
+        this.beforeFindUnlocked = hook;
+    }
+
     public void beforeLock(Runnable hook) {
         this.beforeLock = hook;
     }
@@ -94,9 +105,18 @@ public final class InMemoryBalanceUpdatePeriods implements RecordBalanceUpdatePo
         return rows.putIfAbsent(period, new Row(new InProgress(token), null)) == null;
     }
 
+    // Reads past a lock held by another transaction, like a plain SELECT (ADR-0014).
+    @Override
+    public Optional<BalanceUpdatePeriodState> find(YearMonth period) {
+        calls.add("find");
+        beforeFind.run();
+        return stateOf(period);
+    }
+
     @Override
     public Optional<BalanceUpdatePeriodState> findUnlocked(YearMonth period) {
         calls.add("findUnlocked");
+        beforeFindUnlocked.run();
         return lockedByAnotherTransaction.contains(period) ? Optional.empty() : stateOf(period);
     }
 

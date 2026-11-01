@@ -2,9 +2,17 @@ package org.ikigaidigital.timedeposit.adapter.out.persistence;
 
 import org.ikigaidigital.testcontainers.PostgresContainerConfiguration;
 import org.ikigaidigital.timedeposit.TimeDepositRows;
+import org.ikigaidigital.timedeposit.application.model.BalanceUpdateOutcome;
+import org.ikigaidigital.timedeposit.application.model.BalanceUpdatePeriodState;
+import org.ikigaidigital.timedeposit.application.model.BalanceUpdatePeriodState.Completed;
+import org.ikigaidigital.timedeposit.application.model.BalanceUpdatePeriodState.InProgress;
+import org.ikigaidigital.timedeposit.application.service.BalanceUpdatePeriodReservations;
+import org.ikigaidigital.timedeposit.application.service.BalanceUpdatePeriodReservations.Reservation;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.context.annotation.Import;
@@ -18,7 +26,9 @@ import javax.sql.DataSource;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.time.Clock;
 import java.time.Instant;
+import java.time.OffsetDateTime;
 import java.time.YearMonth;
 import java.time.ZoneOffset;
 import java.util.List;
@@ -43,6 +53,8 @@ class BalanceUpdateLockingTest {
     private static final Instant NOW = Instant.parse("2026-11-01T10:15:30.123456Z");
     private static final YearMonth NOVEMBER = YearMonth.of(2026, 11);
     private static final YearMonth OCTOBER = YearMonth.of(2026, 10);
+    private static final BalanceUpdateOutcome OUTCOME =
+            new BalanceUpdateOutcome(3, Instant.parse("2026-11-01T08:00:00.654321Z"));
     private static final String LOCK_NOVEMBER =
             "select 1 from \"balanceUpdatePeriods\" where \"period\" = date '2026-11-01' for update";
 
@@ -99,12 +111,64 @@ class BalanceUpdateLockingTest {
                 """).params(period.atDay(1), createdAt.atOffset(ZoneOffset.UTC)).update();
     }
 
+    private void insertCompleted(YearMonth period, BalanceUpdateOutcome outcome) {
+        OffsetDateTime executedAt = outcome.executedAt().atOffset(ZoneOffset.UTC);
+        jdbc.sql("""
+                insert into "balanceUpdatePeriods"
+                    ("period", "status", "processedCount", "executedAt", "createdAt", "completedAt")
+                values (?, 'COMPLETED', ?, ?, ?, ?)
+                """).params(period.atDay(1), outcome.processedCount(), executedAt, executedAt, executedAt).update();
+    }
+
     // P9: a month row locked by a running run is skipped, so the duplicate gets 409 instead of waiting.
     @Test
     void skipsAMonthLockedByARun() throws SQLException {
         insertInProgress(NOVEMBER, NOW);
 
         whileLockedBy(LOCK_NOVEMBER, () -> assertThat(inTransaction(() -> periods.findUnlocked(NOVEMBER))).isEmpty());
+    }
+
+    // P16: a plain read returns a locked month at once; a locking read (FOR SHARE, FOR UPDATE) would hit lock_timeout.
+    @ParameterizedTest(name = "completed: {0}")
+    @ValueSource(booleans = {true, false})
+    void findDoesNotWaitForALockedMonth(boolean completed) throws SQLException {
+        if (completed) {
+            insertCompleted(NOVEMBER, OUTCOME);
+        } else {
+            insertInProgress(NOVEMBER, NOW);
+        }
+        BalanceUpdatePeriodState expected = completed ? new Completed(OUTCOME) : new InProgress(NOW);
+
+        whileLockedBy(LOCK_NOVEMBER,
+                () -> assertThat(inTransaction(() -> periods.find(NOVEMBER))).contains(expected));
+    }
+
+    // P16: find takes no row lock, so another transaction can lock the month without waiting while find's is open.
+    @Test
+    void findTakesNoRowLock() {
+        insertCompleted(NOVEMBER, OUTCOME);
+
+        inTransaction(() -> {
+            assertThat(periods.find(NOVEMBER)).isPresent();
+            try {
+                whileLockedBy(LOCK_NOVEMBER + " nowait", () -> { });
+            } catch (SQLException lockNotAvailable) {
+                throw new AssertionError("find left the month locked", lockNotAvailable);
+            }
+            return null;
+        });
+    }
+
+    // P16 with the real SKIP LOCKED: a completed month held locked by another transaction (e.g. a concurrent request
+    // of the month) is replayed, not reported as in progress (ADR-0014).
+    @Test
+    void aCompletedMonthLockedByAnotherTransactionIsReplayed() throws SQLException {
+        insertCompleted(NOVEMBER, OUTCOME);
+        BalanceUpdatePeriodReservations reservations =
+                new BalanceUpdatePeriodReservations(periods, Clock.fixed(NOW, ZoneOffset.UTC));
+
+        whileLockedBy(LOCK_NOVEMBER, () -> assertThat(inTransaction(reservations::reserve))
+                .isEqualTo(new Reservation.Replay(OUTCOME)));
     }
 
     // ADR-0012, unverified until then: ON CONFLICT DO NOTHING does not wait for a row that is only locked.
