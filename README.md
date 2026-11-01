@@ -2,6 +2,9 @@
 
 ## Solution: run and try the API
 The solution is the Java implementation in [`java/`](java/). Design decisions are recorded in [`docs/adr/`](docs/adr/).
+To find your way around, read the [architecture overview](docs/architecture/overview.md), then the
+[data model](docs/architecture/data-model.md), the [API contract](java/src/main/resources/openapi/openapi.yaml) and
+the [ADR index](docs/adr/README.md) (open topics are listed there under *Planned decisions*).
 
 ### Brief → solution
 | Requirement | Where | Verified by |
@@ -11,17 +14,29 @@ The solution is the Java implementation in [`java/`](java/). Design decisions ar
 | Interest rules, extensible to new plans | `timedeposit.domain.interest`; ADR-0011 | Policy and registry unit tests; extensibility test |
 | `TimeDeposit` and `updateBalance` unchanged | `TimeDepositCalculator` keeps its signature and delegates | Characterization tests, frozen legacy copy, randomized comparison |
 | Hexagonal architecture, SOLID | ADR-0008 | ArchUnit rules |
-| Concurrent and repeated balance updates | ADR-0012 (row locks), ADR-0013 (at most once per calendar month) | Persistence lock tests, end-to-end overlap tests |
+| Concurrent and repeated balance updates | ADR-0012 (row locks), ADR-0013 (at most once per calendar month), ADR-0014 (replay without a lock) | Persistence lock tests, end-to-end overlap tests |
 | Assumptions and kept legacy defects | Code comments, ADRs, [`docs/known-issues.md`](docs/known-issues.md) | Pinned by tests, as marked in `known-issues.md` |
 | AI-assisted development | [`AI_USAGE.md`](AI_USAGE.md), [`CLAUDE.md`](CLAUDE.md), [`.claude/`](.claude/) | – |
 
 The scenarios behind the tests are listed in [`docs/testing.md`](docs/testing.md).
 
-Assumption: the API's `id` is a public UUID; the table keeps the brief's integer `id` as an internal key that is
-never exposed (ADR-0004).
+### Key assumptions
+Where the brief is silent, these readings shape what you see (each is justified in its ADR and in the code or the
+contract):
+- **Monthly interest is applied at most once per UTC calendar month.** Later requests in the month return that
+  month's outcome; a missed month is not applied later (ADR-0013).
+- **`days` is never advanced** by the application: it is the deposit's age as stored, so a deposit stays in the
+  same rate window until someone updates `days` (ADR-0004).
+- **Money is a two-decimal string** in the API (`"1000.83"`), stored as `NUMERIC(15,2)`; the calculator rounds only
+  the interest, exactly as before, and the stored balance is that cent amount (ADR-0004, ADR-0006).
+- **Unknown plan types** are stored, listed unchanged and earn no interest; plan types match case-sensitively, as
+  in the legacy calculator (ADR-0011, [`known-issues.md`](docs/known-issues.md)).
+- **The API's `id` is a public UUID;** the table keeps the brief's integer `id` as an internal key that is never
+  exposed (ADR-0004).
 
 ### Start the stack
-Prerequisite: Docker (with Compose). No JDK is needed.
+Prerequisite: Docker with Compose v2 (`docker compose`) and BuildKit, the default in current Docker Desktop and
+Engine releases. No JDK is needed.
 
 ```bash
 cd java
@@ -29,7 +44,8 @@ docker compose up --build
 ```
 
 The first build downloads Gradle and the dependencies inside the image and takes a few minutes. The stack is ready
-once the log shows `Started TimeDepositApplication`.
+once the log shows `Started TimeDepositApplication`. This runs in the foreground; use a second terminal for the
+commands below, or start it detached with `docker compose up --build -d` and follow `docker compose logs -f app`.
 
 | Service | URL | Notes |
 |---|---|---|
@@ -72,6 +88,16 @@ month.
 ### Stop and reset
 - `docker compose down` stops the stack; the database volume and its balances are kept.
 - `docker compose down -v` also deletes the database; the next start loads the demo data again.
+
+### Troubleshooting
+- **Port 8080 or 8081 already in use:** stop the other process. The ports are fixed because the contract's server
+  URL (`http://localhost:8080/api/v1`) and the allowed CORS origin (`http://localhost:8081`) name them (ADR-0010).
+- **Swagger UI shows "Failed to fetch" or a CORS error:** open it as `http://localhost:8081`, not
+  `http://127.0.0.1:8081`; the browser treats them as different origins. The same message appears while the app
+  is still starting: wait for `Started TimeDepositApplication`.
+- **`no configuration file provided`:** run Compose from `java/`, or pass `-f java/compose.yaml` from the
+  repository root.
+- **Balances no longer change:** the month was already applied; reset with `docker compose down -v`.
 
 ### Notes
 - The application serves only the two API operations; Swagger UI runs as a separate container (ADR-0005), which

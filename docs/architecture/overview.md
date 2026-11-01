@@ -1,7 +1,7 @@
 # Architecture Overview
 
 How the Time Deposit service is structured. Each section summarises accepted decisions; the ADRs hold the
-reasoning ([ADR index](../adr/README.md)). Topics still open are marked as pending.
+reasoning ([ADR index](../adr/README.md)); open topics are listed there under *Planned decisions*.
 
 ## 1. System context (C4 level 1)
 An API client (a developer using Swagger UI or `curl`) lists time deposits and triggers the monthly balance
@@ -39,7 +39,8 @@ flowchart LR
       in1["ListTimeDepositsUseCase"]
       in2["ApplyMonthlyInterestUseCase"]
       svc1["ListTimeDepositsService"]
-      svc2["ApplyMonthlyInterestService"]
+      svc2["ApplyMonthlyInterestService<br/>(no transaction)"]
+      tx["BalanceUpdatePeriodReservations · MonthlyInterestRun<br/>(@Transactional, ADR-0012)"]
       out1["LoadTimeDepositViewsPort"]
       out2["LoadTimeDepositsPort · SaveTimeDepositsPort"]
       out3["RecordBalanceUpdatePort"]
@@ -48,7 +49,7 @@ flowchart LR
       terms["TimeDepositTerms · ReadOnlyTimeDeposit"]
       policies["interest/ · InterestPolicies · RateWindowPolicy · NoInterestPolicy (ADR-0011)"]
     end
-    subgraph root["root package (legacy, unchanged)"]
+    subgraph root["root package (legacy API, signatures unchanged)"]
       calc["TimeDepositCalculator<br/>(belongs to timedeposit)"]
       kernel["TimeDeposit<br/>(shared kernel)"]
     end
@@ -60,17 +61,19 @@ flowchart LR
   svc1 -. implements .-> in1
   svc2 -. implements .-> in2
   svc1 --> out1
-  svc2 --> out2 & out3 & calc
+  svc2 --> tx
+  tx --> out2 & out3 & calc
   jpa -. implements .-> out1 & out2 & out3
   svc1 --> terms
   ctrl --> terms
   calc --> kernel
-  calc -. "after refactoring" .-> policies
+  calc --> policies
 ```
 - **Dependencies point inward:** adapters depend on ports; the application depends on the domain; the domain has
   no framework dependencies. ArchUnit enforces the rules of ADR-0008.
 - **Ports:** `port.in` is the driving side (the application's API), `port.out` the driven side (what it needs).
-- **Wiring:** services carry `@UseCase` (a `@Service` stereotype); `TimeDepositCalculator` is an explicit `@Bean`
+- **Wiring:** implementations of `port.in` carry `@UseCase` (a `@Service` stereotype); the transactional steps of
+  the balance update are plain `@Service` beans (ADR-0012 B); `TimeDepositCalculator` is an explicit `@Bean`
   in `configuration`; the main class sits in the root package.
 
 ## 4. Key flows
@@ -130,13 +133,16 @@ At most one run per UTC calendar month (ADR-0013), with ADR-0012's serialisation
   (ADR-0004, ADR-0006).
 - **Persistence mapping:** JPA entities exist only in the persistence adapter and are mapped two-way to
   `TimeDeposit`; identifiers are quoted camelCase as in the brief (ADR-0006, ADR-0008).
-- **Transactions:** `@Transactional` on use-case services; adapters call services only through `port.in`
-  (ADR-0008).
+- **Transactions:** adapters call services only through `port.in` (ADR-0008). A use case that needs exactly one
+  transaction would carry `@Transactional` itself (ADR-0008 decision 7); today neither does. The balance update needs
+  several, so `ApplyMonthlyInterestService` has none and
+  calls `BalanceUpdatePeriodReservations` (reserve, release) and `MonthlyInterestRun` (the run), each committed on
+  its own (ADR-0012 B). The list reads in one statement and needs no transaction.
 - **Errors:** RFC 9457 Problem Details for all errors handled by Spring MVC, including `404` for unknown paths;
   no other HTTP routes exist (ADR-0003, ADR-0005).
 - **Testing:** unit tests for domain and application with in-memory fakes of `port.out`; integration tests
   (`src/integrationTest`, Testcontainers) for adapters and endpoints; ArchUnit for the architecture rules
-  (ADR-0007, ADR-0008).
+  (ADR-0007, ADR-0008, ADR-0009, ADR-0015; guide: [testing.md](../testing.md)).
 
 ## Related decisions
 | Topic | ADR |
@@ -148,3 +154,7 @@ At most one run per UTC calendar month (ADR-0013), with ADR-0012's serialisation
 | Data model (current state: [data-model.md](data-model.md)) | [ADR-0006](../adr/0006-data-model.md), [ADR-0013](../adr/0013-interest-periods.md) |
 | Technology stack and build | [ADR-0007](../adr/0007-technology-stack-and-build.md) |
 | Hexagonal architecture | [ADR-0008](../adr/0008-hexagonal-architecture.md) |
+| Testing strategy | [ADR-0009](../adr/0009-testing-strategy.md), [ADR-0015](../adr/0015-testing-strategy-as-built.md) |
+| Local runtime (Docker Compose, Swagger UI, CORS) | [ADR-0010](../adr/0010-local-runtime.md) |
+| Interest calculation (policies) | [ADR-0011](../adr/0011-interest-calculation-design.md) |
+| Balance update: consistency, month rule, replay | [ADR-0012](../adr/0012-balance-update-consistency.md), [ADR-0013](../adr/0013-interest-periods.md), [ADR-0014](../adr/0014-replay-completed-month-without-lock.md) |

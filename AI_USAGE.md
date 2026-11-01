@@ -8,8 +8,9 @@
 | File | Purpose |
 |---|---|
 | [`CLAUDE.md`](CLAUDE.md) | Project rules loaded by Claude Code: context, hard constraints, architecture, git workflow |
-| [`.claude/settings.json`](.claude/settings.json) | Shared permissions: read-only shell and git commands, Gradle builds, branching, commits, pushes and PR creation allowed (each commit is still approved in chat, `CLAUDE.md` rule 2); merges, rebases, resets, PR merge/close, remote branch deletion and `docker compose` ask first; force pushes, recursive deletes, destructive `find` flags, `git checkout --` / `git checkout .` and `.env` reads denied |
+| [`.claude/settings.json`](.claude/settings.json) | Shared permissions. Allowed: read-only shell and git commands, Gradle builds, `docker compose`, the contract lint (`docker run --rm --network none …`), `curl` probes of `localhost`, branching, commits, pushes and PR creation (each commit is still approved in chat, `CLAUDE.md` rule 2), so the reviewer can build, test and smoke-run on its own. Ask first: merges, rebases, resets, PR merge/close, remote branch deletion. Denied: force pushes, recursive deletes, destructive `find` flags, `git checkout --` / `git checkout .` and `.env` reads |
 | `.claude/settings.local.json` | Personal overrides (gitignored) |
+| Claude Code auto-memory | Personal notes kept by Claude Code outside the repository (session handover, working preferences); not committed and not needed to reproduce the work — the binding rules are in `CLAUDE.md` |
 | [`.claude/commands/`](.claude/commands/) | Workflow slash commands: `/step` (start an increment), `/review` (review the diff), `/ship` (push and open a PR) |
 | [`.claude/agents/code-reviewer.md`](.claude/agents/code-reviewer.md) | Read-only reviewer subagent that checks changes against `CLAUDE.md` |
 | [`.claude/agents/test-designer.md`](.claude/agents/test-designer.md) | Read-only subagent that derives test cases from the requirements before implementation (ADR-0009) |
@@ -34,7 +35,7 @@ human approval.
 | Part | AI | Human |
 |---|---|---|
 | Requirements analysis, readings of ambiguous terms | Drafted, with options and a recommendation | Chose every reading |
-| Design (ADR-0001…0012, OpenAPI contract, schema) | Drafted the ADRs and alternatives; checked facts in official docs | Decided each option; accepted each ADR by merging |
+| Design (ADR-0001…0015, OpenAPI contract, schema) | Drafted the ADRs and alternatives; checked facts in official docs | Decided each option; accepted each ADR by merging |
 | Tests | `test-designer` (from the first refactoring step on) derived cases from the requirements; new behaviour was written red first, characterization tests pin the legacy behaviour | Reviewed the proposed test cases and their implementation; approved each plan |
 | Implementation and refactoring (calculator, interest policies, persistence, use cases, REST, Docker) | Wrote the code in small increments | Contributed suggestions and proposed approaches; approved each commit |
 | Reviews | `code-reviewer` reviewed the increments against `CLAUDE.md` and the ADRs before they were shipped | Reviewed the codebase continuously throughout; decided what to fix now and what to record as a follow-up |

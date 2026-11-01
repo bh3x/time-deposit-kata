@@ -22,12 +22,13 @@ An ADR captures one significant decision: its context, the options considered, t
 | [0006](0006-data-model.md) | Data model | Accepted; partly superseded by 0013 | 2026-10-31 |
 | [0007](0007-technology-stack-and-build.md) | Technology stack and build | Accepted | 2026-10-31 |
 | [0008](0008-hexagonal-architecture.md) | Hexagonal architecture | Accepted | 2026-10-31 |
-| [0009](0009-testing-strategy.md) | Testing strategy | Accepted | 2026-10-31 |
+| [0009](0009-testing-strategy.md) | Testing strategy | Accepted; partly superseded by 0015 | 2026-10-31 |
 | [0010](0010-local-runtime.md) | Local runtime with Docker Compose | Accepted; partly superseded by 0013 | 2026-11-01 |
 | [0011](0011-interest-calculation-design.md) | Interest calculation design | Accepted | 2026-11-01 |
 | [0012](0012-balance-update-consistency.md) | Balance update consistency | Accepted; partly superseded by 0013, 0014 | 2026-11-01 |
 | [0013](0013-interest-periods.md) | Interest periods | Accepted; partly superseded by 0014 | 2026-11-01 |
 | [0014](0014-replay-completed-month-without-lock.md) | Replay a completed month without a lock | Accepted | 2026-11-01 |
+| [0015](0015-testing-strategy-as-built.md) | Testing strategy as built | Accepted | 2026-11-01 |
 
 ## Planned decisions
 Numbers are assigned when each ADR is written.
@@ -49,3 +50,25 @@ Numbers are assigned when each ADR is written.
 - Code style enforcement (tooling step): lines over 120 characters exist and nothing enforces a limit. Options:
   `.editorconfig` only (editor hint), Checkstyle or Spotless in `./gradlew check` (a new build dependency, approved
   separately).
+- Balance update logging (ADR-0008): the operation that changes money logs nothing — takeovers, lost fences,
+  aborted runs and failed releases leave no trace — and ADR-0008 rule 5 allows no logging API in `application`.
+  Options: allow SLF4J in `application` and log reserve, takeover, completion and failures there; log only the
+  result in the REST adapter (loses takeovers and failures); or record events in the month table.
+- Transaction propagation guard (ADR-0012): reserve, run and release commit separately only while no outer
+  transaction exists; a caller that wraps `applyMonthlyInterest()` in one would merge them, turning the `409` into a
+  wait and breaking release-then-rethrow. Options: `propagation = NEVER` on the orchestrator (fails fast),
+  `REQUIRES_NEW` on the three steps, or a documented rule; plus a test either way.
+- Continuous integration (ADR-0007): `./gradlew check`, `-Werror` and the contract lint run only on developer
+  machines. Options: a GitHub Actions workflow (Gradle with wrapper validation, Testcontainers on the runner, the
+  Redocly lint, `docker build`), optionally with Dependabot or Renovate for versions.
+- Operability of the local stack (ADR-0010): the app container has no readiness check, so `docker compose up --wait`
+  reports it ready (running) before Spring has started — a healthcheck must not assume `curl` in the JRE image
+  (unverified); Compose's default 10 s stop grace period is shorter than Spring's
+  graceful shutdown, so a killed run leaves the month in progress until the 10-minute takeover; responses carry no
+  `X-Content-Type-Options` or `Cache-Control` headers. Options: a Compose healthcheck on the existing list operation
+  (no new route), `stop_grace_period`, and a small header filter — or accept and document each.
+- Test infrastructure (ADR-0009, ADR-0015): each cached test context starts its own PostgreSQL container, cleanup
+  differs between classes (some delete after, some truncate before), and PIT mutation testing is deferred. Options:
+  one static container, a shared truncate-before helper, and PIT as an opt-in task outside `check` (a new plugin,
+  approved separately); ArchUnit gaps (Jakarta `@Transactional`, field injection, a generic cross-capability rule)
+  belong here too.
