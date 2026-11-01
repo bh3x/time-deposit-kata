@@ -22,11 +22,13 @@
       "Bash(cut:*)",
       "Bash(git add:*)",
       "Bash(git commit:*)",
-      "Bash(git checkout:*)"
+      "Bash(git switch:*)",
+      "Bash(git checkout -b:*)",
+      "Bash(git checkout main)"
     ],
     "ask": [
       "Bash(git push:*)",
-      "Bash(git switch:*)",
+      "Bash(git checkout:*)",
       "Bash(git merge:*)",
       "Bash(git rebase:*)",
       "Bash(git reset:*)",
@@ -48,6 +50,8 @@
       "Bash(rm -R*)",
       "Bash(rm --recursive*)",
       "Bash(cat *.env*)",
+      "Bash(git checkout -- *)",
+      "Bash(git checkout .)",
       "Bash(find * -delete*)",
       "Bash(find * -exec*)",
       "Bash(find * -execdir*)",
