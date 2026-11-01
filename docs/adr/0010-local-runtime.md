@@ -57,6 +57,8 @@ Constraints: a reviewer may have Docker but no JDK 25; the application maps no r
 ## Consequences
 - One command for reviewers: `cd java && docker compose up --build`; Swagger UI at `http://localhost:8081`, API at
   `http://localhost:8080/api/v1`. The README explains this and the `curl` equivalents.
+- The Redocly `no-server-example.com` warning on the `localhost` server is accepted: the server exists precisely
+  for the local stack. The generated base path is unchanged (`/api/v1`).
 - Ports are fixed: remapping the API port also needs a matching contract server, or a client other than Swagger UI.
   Another UI origin needs `app.cors.allowed-origins` (environment variable `APP_CORS_ALLOWEDORIGINS`).
 - R3 (`docs/testing.md`) is covered: web slice for the CORS rules, end to end for the preflight with the real

@@ -5,6 +5,9 @@ info:
   description: >
     Contract-first API for XA Bank time deposits. Design decisions are recorded in docs/adr.
 servers:
+  # First entry is Swagger UI's default: the UI runs on its own origin and calls the API there (ADR-0010).
+  - url: http://localhost:8080/api/v1
+    description: Local Docker Compose stack
   - url: /api/v1
     description: Relative to the host serving the API
 security: []  # no authentication: not required by the brief (see ADR-0004)
