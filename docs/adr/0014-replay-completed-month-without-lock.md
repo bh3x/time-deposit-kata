@@ -1,6 +1,6 @@
 # ADR-0014: Replay a completed month without a lock
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-11-01
 
 ## Context

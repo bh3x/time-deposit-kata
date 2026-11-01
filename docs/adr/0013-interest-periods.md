@@ -1,6 +1,6 @@
 # ADR-0013: Interest periods
 
-- **Status:** Accepted
+- **Status:** Accepted; partly superseded by [ADR-0014](0014-replay-completed-month-without-lock.md)
 - **Date:** 2026-11-01
 
 ## Context
