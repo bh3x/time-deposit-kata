@@ -50,6 +50,13 @@ class TimeDepositCapabilityArchitectureTest {
                     resideInAnyPackage("java..", "org.ikigaidigital.timedeposit.domain..")
                             .or(belongToAnyOf(TimeDeposit.class, TimeDepositCalculator.class)));
 
+    // ADR-0011: the interest policies see deposits only through timedeposit.domain (TimeDepositTerms). Stricter than
+    // rule 1, so they never reach the legacy kernel or the calculator that uses them.
+    @ArchTest
+    static final ArchRule interestPoliciesDependOnlyOnTheJdkAndTheirDomain = classes()
+            .that().resideInAPackage("org.ikigaidigital.timedeposit.domain.interest..")
+            .should().onlyDependOnClassesThat().resideInAnyPackage("java..", "org.ikigaidigital.timedeposit.domain..");
+
     // Rules 1 and 5: the application depends on its domain, the kernel and shared.application; from Spring only the
     // stereotype and transaction annotations.
     @ArchTest
