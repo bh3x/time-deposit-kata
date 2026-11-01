@@ -1,46 +1,37 @@
 package org.ikigaidigital;
 
+import org.ikigaidigital.timedeposit.domain.ReadOnlyTimeDeposit;
+import org.ikigaidigital.timedeposit.domain.interest.InterestPolicies;
+
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.List;
+import java.util.Objects;
 
 public class TimeDepositCalculator {
-    // Applies to every plan, as in the legacy code; whether a future plan may define its own grace period ("for any
-    // existing plans") is left to the planned interest calculation design.
-    private static final int GRACE_PERIOD_DAYS = 30;
-    // "No interest after 1 year": the legacy rule is days < 366, so day 365 still earns interest. Other readings
-    // (days <= 365, a calendar year, twelve monthly applications) are not used: behaviour must stay identical.
-    private static final int STUDENT_MAX_DAYS_EXCLUSIVE = 366;
-    private static final int PREMIUM_MIN_DAYS_EXCLUSIVE = 45;
-    private static final double BASIC_ANNUAL_RATE = 0.01;
-    private static final double STUDENT_ANNUAL_RATE = 0.03;
-    private static final double PREMIUM_ANNUAL_RATE = 0.05;
-    private static final int MONTHS_PER_YEAR = 12;
+    // Plan types, rates, day windows and the grace period live in the interest policies (ADR-0011). The 30-day grace
+    // period belongs to each policy, because the brief limits it to "existing plans": today's three use
+    // InterestPolicies.DEFAULT_GRACE_PERIOD_DAYS, so the behaviour is unchanged.
+    private final InterestPolicies interestPolicies;
 
-    public void updateBalance(List<TimeDeposit> timeDeposits) {
-        for (TimeDeposit deposit : timeDeposits) {
-            double interest = monthlyInterest(deposit);
-            deposit.setBalance(deposit.getBalance() + roundToCents(interest));
-        }
+    public TimeDepositCalculator() {
+        this(InterestPolicies.defaults());
     }
 
-    // One month of interest for the deposit's plan. The plan type is read only after the grace period, and matched
-    // exactly and case-sensitively; unknown plans earn nothing. A null plan type throws NullPointerException here,
-    // as the legacy equals chain did (pinned in the characterization tests) — do not add a "case null".
-    private static double monthlyInterest(TimeDeposit deposit) {
-        if (deposit.getDays() <= GRACE_PERIOD_DAYS) {
-            return 0.0;
+    public TimeDepositCalculator(InterestPolicies interestPolicies) {
+        this.interestPolicies = Objects.requireNonNull(interestPolicies, "interestPolicies");
+    }
+
+    // One deposit at a time, in list order, and always written, also when the interest is 0.0 (ADR-0011): computing
+    // all interests first would change which deposits are updated when one fails (known issue #7), and skipping the
+    // write would let a null balance pass (known issue #4) and keep -0.0. Wrapping a null element throws
+    // NullPointerException, as the legacy code did (known issue #10).
+    public void updateBalance(List<TimeDeposit> timeDeposits) {
+        for (TimeDeposit deposit : timeDeposits) {
+            double interest = interestPolicies.policyFor(deposit.getPlanType())
+                    .monthlyInterest(new ReadOnlyTimeDeposit(deposit));
+            deposit.setBalance(deposit.getBalance() + roundToCents(interest));
         }
-        return switch (deposit.getPlanType()) {
-            case "student" -> deposit.getDays() < STUDENT_MAX_DAYS_EXCLUSIVE
-                    ? deposit.getBalance() * STUDENT_ANNUAL_RATE / MONTHS_PER_YEAR
-                    : 0.0;
-            case "premium" -> deposit.getDays() > PREMIUM_MIN_DAYS_EXCLUSIVE
-                    ? deposit.getBalance() * PREMIUM_ANNUAL_RATE / MONTHS_PER_YEAR
-                    : 0.0;
-            case "basic" -> deposit.getBalance() * BASIC_ANNUAL_RATE / MONTHS_PER_YEAR;
-            default -> 0.0;
-        };
     }
 
     // Only the interest is rounded, from its exact binary value (new BigDecimal(double)); the sum is not rounded.
