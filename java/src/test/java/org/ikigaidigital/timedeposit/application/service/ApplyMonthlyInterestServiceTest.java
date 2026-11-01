@@ -3,6 +3,7 @@ package org.ikigaidigital.timedeposit.application.service;
 import org.ikigaidigital.TimeDeposit;
 import org.ikigaidigital.TimeDepositCalculator;
 import org.ikigaidigital.timedeposit.application.model.BalanceUpdateOutcome;
+import org.ikigaidigital.timedeposit.application.model.BalanceUpdatePeriodState;
 import org.ikigaidigital.timedeposit.application.model.BalanceUpdatePeriodState.Completed;
 import org.ikigaidigital.timedeposit.application.model.BalanceUpdatePeriodState.InProgress;
 import org.ikigaidigital.timedeposit.application.model.BalanceUpdateResult;
@@ -86,6 +87,19 @@ class ApplyMonthlyInterestServiceTest {
             MutableClock late = new MutableClock(Instant.parse("2026-11-01T10:15:30.123456999Z"), ZoneOffset.UTC);
 
             assertThat(serviceWith(late).applyMonthlyInterest()).isEqualTo(succeeded(0, NOW_MICROS));
+        }
+
+        // ADR-0012 C: the token is the reservation time in microseconds, truncated rather than rounded, so it equals
+        // what timestamptz stores and the fence's equality check matches the stored row.
+        @Test
+        void storesTheReservationTokenTruncatedToMicroseconds() {
+            MutableClock late = new MutableClock(Instant.parse("2026-11-01T10:15:30.123456999Z"), ZoneOffset.UTC);
+            List<BalanceUpdatePeriodState> atRun = new ArrayList<>();
+            periods.beforeLock(() -> atRun.add(periods.stateOf(NOVEMBER).orElseThrow()));
+
+            assertThat(serviceWith(late).applyMonthlyInterest()).isEqualTo(succeeded(0, NOW_MICROS));
+
+            assertThat(atRun).containsExactly(new InProgress(NOW_MICROS));
         }
 
         // ADR-0012: executedAt is read once the deposits are locked, so serialised runs get increasing times.
@@ -310,7 +324,7 @@ class ApplyMonthlyInterestServiceTest {
 
         @Test
         void replaysWhenASuccessorCompletedTheMonth() {
-            periods.beforeLock(() -> periods.storeCompleted(NOVEMBER, STORED, NOW));
+            periods.beforeLock(() -> periods.storeCompleted(NOVEMBER, STORED, NOW_MICROS));
 
             assertThat(service().applyMonthlyInterest()).isEqualTo(new Succeeded(STORED));
             assertThat(calls).doesNotContain("load", "save", "release");

@@ -19,8 +19,10 @@ import java.util.Set;
 /**
  * In-memory balance update periods for application tests (ADR-0009), with the semantics the persistence tests pin for
  * the real queries: token-filtered completion and release, rows "locked by another transaction" that lookups skip,
- * no purge. Hooks and failures let tests play the races of ADR-0012/0013 (a successor acting between reservation and
- * run, or a run completing between the reservation's reads) deterministically. Calls go to a shared log; the months
+ * no purge. It rejects times finer than microseconds, the port's precondition (ADR-0012 C), also in the arrange
+ * helpers, since PostgreSQL could never hold such a row. Hooks and failures let tests play the races of
+ * ADR-0012/0013 (a successor acting between reservation and run, or a run completing between the reservation's
+ * reads) deterministically. Calls go to a shared log; the months
  * passed to {@code lock} are recorded.
  */
 public final class InMemoryBalanceUpdatePeriods implements RecordBalanceUpdatePort {
@@ -43,11 +45,23 @@ public final class InMemoryBalanceUpdatePeriods implements RecordBalanceUpdatePo
         this.calls = calls;
     }
 
+    // The port promises times truncated to microseconds, the precision of timestamptz (ADR-0012 C). A finer instant
+    // would match its own copy here but not the row PostgreSQL stores, so the fake rejects it instead of hiding a
+    // missing truncation.
+    private static void requireMicroseconds(Instant instant, String what) {
+        if (instant.getNano() % 1_000 != 0) {
+            throw new IllegalArgumentException(what + " is finer than microseconds: " + instant);
+        }
+    }
+
     public void storeInProgress(YearMonth period, Instant token) {
+        requireMicroseconds(token, "token");
         rows.put(period, new Row(new InProgress(token), null));
     }
 
     public void storeCompleted(YearMonth period, BalanceUpdateOutcome outcome, Instant completedAt) {
+        requireMicroseconds(outcome.executedAt(), "executedAt");
+        requireMicroseconds(completedAt, "completedAt");
         rows.put(period, new Row(new Completed(outcome), completedAt));
     }
 
@@ -102,6 +116,7 @@ public final class InMemoryBalanceUpdatePeriods implements RecordBalanceUpdatePo
     @Override
     public boolean reserve(YearMonth period, Instant token) {
         calls.add("reserve");
+        requireMicroseconds(token, "token");
         return rows.putIfAbsent(period, new Row(new InProgress(token), null)) == null;
     }
 
@@ -123,6 +138,7 @@ public final class InMemoryBalanceUpdatePeriods implements RecordBalanceUpdatePo
     @Override
     public void takeOver(YearMonth period, Instant token) {
         calls.add("takeOver");
+        requireMicroseconds(token, "token");
         if (!(stateOf(period).orElse(null) instanceof InProgress)) {
             throw new IllegalStateException("balance update period " + period + " is not in progress");
         }
@@ -143,6 +159,9 @@ public final class InMemoryBalanceUpdatePeriods implements RecordBalanceUpdatePo
     @Override
     public boolean complete(YearMonth period, Instant token, BalanceUpdateOutcome outcome, Instant completedAt) {
         calls.add("complete");
+        requireMicroseconds(token, "token");
+        requireMicroseconds(outcome.executedAt(), "executedAt");
+        requireMicroseconds(completedAt, "completedAt");
         if (completeMatchesNothing || !new InProgress(token).equals(stateOf(period).orElse(null))) {
             return false;
         }
@@ -153,6 +172,7 @@ public final class InMemoryBalanceUpdatePeriods implements RecordBalanceUpdatePo
     @Override
     public void release(YearMonth period, Instant token) {
         calls.add("release");
+        requireMicroseconds(token, "token");
         if (releaseFailure != null) {
             throw releaseFailure;
         }

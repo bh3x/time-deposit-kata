@@ -19,6 +19,7 @@ import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.json.JsonAssert;
 import org.springframework.test.web.servlet.assertj.MockMvcTester;
+import org.springframework.test.web.servlet.assertj.MvcTestResult;
 
 import java.time.Instant;
 import java.util.List;
@@ -40,6 +41,7 @@ import static org.mockito.BDDMockito.then;
 class TimeDepositsControllerTest {
 
     private static final String TIME_DEPOSITS = "/api/v1/time-deposits";
+    private static final String BALANCE_UPDATES = "/api/v1/balance-updates";
 
     @Autowired
     private MockMvcTester mvc;
@@ -160,8 +162,6 @@ class TimeDepositsControllerTest {
     @DisplayName("POST /balance-updates")
     class CreateBalanceUpdate {
 
-        private static final String BALANCE_UPDATES = "/api/v1/balance-updates";
-
         private static Succeeded succeeded(int processedCount, String executedAt) {
             return new Succeeded(new BalanceUpdateOutcome(processedCount, Instant.parse(executedAt)));
         }
@@ -233,6 +233,26 @@ class TimeDepositsControllerTest {
                     .hasPathSatisfying("$.title", title -> assertThat(title).isEqualTo("Internal Server Error"))
                     .doesNotHavePath("$.detail");
             assertThat(mvc.get().uri(TIME_DEPOSITS)).body().asString()
+                    .doesNotContain("secret internal detail")
+                    .doesNotContain("null");
+        }
+
+        // R5 for the balance update: an unexpected failure is a 500, never the 409 of a month in progress.
+        @Test
+        void rendersAnUnexpectedErrorOfTheBalanceUpdateAsInternalServerError() {
+            given(applyMonthlyInterest.applyMonthlyInterest())
+                    .willThrow(new IllegalStateException("secret internal detail"));
+
+            MvcTestResult result = mvc.post().uri(BALANCE_UPDATES).exchange();
+
+            assertThat(result)
+                    .hasStatus(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .hasContentType(MediaType.APPLICATION_PROBLEM_JSON)
+                    .bodyJson()
+                    .hasPathSatisfying("$.status", status -> assertThat(status).isEqualTo(500))
+                    .hasPathSatisfying("$.title", title -> assertThat(title).isEqualTo("Internal Server Error"))
+                    .doesNotHavePath("$.detail");
+            assertThat(result).body().asString()
                     .doesNotContain("secret internal detail")
                     .doesNotContain("null");
         }
