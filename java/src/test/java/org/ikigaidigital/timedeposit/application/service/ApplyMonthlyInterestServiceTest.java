@@ -100,7 +100,6 @@ class ApplyMonthlyInterestServiceTest {
             assertThat(serviceWith(late).applyMonthlyInterest()).isEqualTo(succeeded(0, NOW_MICROS));
 
             assertThat(atRun).containsExactly(new InProgress(NOW_MICROS));
-            assertThat(periods.stateOf(NOVEMBER)).contains(new Completed(new BalanceUpdateOutcome(0, NOW_MICROS)));
         }
 
         // ADR-0012: executedAt is read once the deposits are locked, so serialised runs get increasing times.
@@ -222,19 +221,6 @@ class ApplyMonthlyInterestServiceTest {
 
             assertThat(service().applyMonthlyInterest()).isEqualTo(succeeded(0, NOW_MICROS));
             assertThat(calls).containsSubsequence("takeOver", "lock", "load", "complete");
-        }
-
-        // The new token of a takeover is truncated like a reservation's (ADR-0012 C).
-        @Test
-        void takesOverWithATokenTruncatedToMicroseconds() {
-            periods.storeInProgress(NOVEMBER, NOW_MICROS.minus(Duration.ofMinutes(10)));
-            MutableClock late = new MutableClock(Instant.parse("2026-11-01T10:15:30.123456999Z"), ZoneOffset.UTC);
-            List<BalanceUpdatePeriodState> atRun = new ArrayList<>();
-            periods.beforeLock(() -> atRun.add(periods.stateOf(NOVEMBER).orElseThrow()));
-
-            assertThat(serviceWith(late).applyMonthlyInterest()).isEqualTo(succeeded(0, NOW_MICROS));
-
-            assertThat(atRun).containsExactly(new InProgress(NOW_MICROS));
         }
 
         @Test

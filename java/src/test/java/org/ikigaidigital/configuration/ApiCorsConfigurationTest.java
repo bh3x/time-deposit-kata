@@ -189,8 +189,9 @@ class ApiCorsConfigurationTest {
             verifyNoInteractions(listTimeDeposits);
         }
 
-        // A POST without a body is a browser "simple request": it is sent without a preflight, so the rejection of
-        // the actual request is what keeps a page from another origin from applying the month's interest.
+        // A POST without a body, or with a CORS-safelisted Content-Type, is a browser "simple request": it is sent
+        // without a preflight, so the rejection of the actual request is what keeps a page from another origin from
+        // applying the month's interest.
         @Test
         void rejectsPostFromAnotherOriginWithoutRunningIt() {
             assertThat(mvc.post().uri(BALANCE_UPDATES).header(ORIGIN, "http://localhost:8082"))
