@@ -8,9 +8,11 @@ import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
 import static org.assertj.core.api.Assertions.assertThatNullPointerException;
 
 /**
@@ -246,6 +248,66 @@ class TimeDepositCalculatorCharacterizationTest {
 
             assertThatNullPointerException().isThrownBy(() -> calculator.updateBalance(List.of(updated, failing)));
             assertThat(updated.getBalance()).isEqualTo(1000.83);
+        }
+    }
+
+    @Nested
+    @DisplayName("non-finite and null inputs (known issues #8-#10), pinned before the interest-policy refactoring")
+    class NonFiniteAndNullInputs {
+
+        // new BigDecimal(double) rejects NaN and infinities, so rounding the interest of an earning plan throws
+        @ParameterizedTest(name = "{0} {1} at {2} days fails")
+        @CsvSource({
+                "basic, NaN, 31", "basic, Infinity, 31", "basic, -Infinity, 31",
+                "student, NaN, 31", "student, Infinity, 31", "student, -Infinity, 31",
+                "premium, NaN, 46", "premium, Infinity, 46", "premium, -Infinity, 46"})
+        void nonFiniteBalanceFailsWhenAKnownPlanEarns(String planType, double balance, int days) {
+            TimeDeposit deposit = new TimeDeposit(1, planType, balance, days);
+
+            assertThatExceptionOfType(NumberFormatException.class)
+                    .isThrownBy(() -> calculator.updateBalance(List.of(deposit)));
+        }
+
+        // An interest of 0.0 is still added: NaN + 0.0 stays NaN, an infinity stays the same infinity. The expected
+        // value is boxed so that Double.equals compares it, which treats NaN as equal to itself (== does not).
+        @ParameterizedTest(name = "{0} {1} at {2} days is kept")
+        @CsvSource({
+                "gold, NaN, 31", "gold, Infinity, 31", "gold, -Infinity, 31",
+                "basic, NaN, 30", "basic, Infinity, 30", "basic, -Infinity, 30",
+                "student, NaN, 366", "student, Infinity, 366", "student, -Infinity, 366",
+                "premium, NaN, 45", "premium, Infinity, 45", "premium, -Infinity, 45"})
+        void nonFiniteBalancePassesThroughWithoutInterest(String planType, double balance, int days) {
+            assertThat(balanceAfterUpdate(planType, balance, days)).isEqualTo(Double.valueOf(balance));
+        }
+
+        @Test
+        void nullListFails() {
+            assertThatNullPointerException().isThrownBy(() -> calculator.updateBalance(null));
+        }
+
+        // Only the exception type is pinned: its message may change when deposits are wrapped (ADR-0011)
+        @Test
+        void nullElementFails() {
+            List<TimeDeposit> deposits = Arrays.asList(null, new TimeDeposit(1, "basic", 1200.00, 31));
+
+            assertThatNullPointerException().isThrownBy(() -> calculator.updateBalance(deposits));
+        }
+
+        @Test
+        void nullElementFailsAfterTheDepositsBeforeItAreUpdated() {
+            TimeDeposit updated = new TimeDeposit(1, "basic", 1200.00, 31);
+
+            assertThatNullPointerException().isThrownBy(() -> calculator.updateBalance(Arrays.asList(updated, null)));
+            assertThat(updated.getBalance()).isEqualTo(1201.00);
+        }
+
+        // The balance is always written, also when no interest applies: -0.0 + 0.0 is +0.0 (ADR-0011). isEqualTo
+        // would not tell the two zeros apart, so the raw bits are compared.
+        @Test
+        void negativeZeroBalanceIsWrittenAsPositiveZero() {
+            double balance = balanceAfterUpdate("basic", -0.0, 30);
+
+            assertThat(Double.doubleToRawLongBits(balance)).isEqualTo(Double.doubleToRawLongBits(0.0));
         }
     }
 }
