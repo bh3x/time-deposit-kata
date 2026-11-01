@@ -28,7 +28,7 @@ class BalanceUpdateOutcomeTest {
                     .withMessageContaining(String.valueOf(processedCount));
         }
 
-        // P5: a run over no deposits is a valid outcome, and the boundary of the guard above.
+        // The boundary of the guard above: a run over no deposits (scenario P5) must be representable.
         @Test
         void acceptsAnEmptyRun() {
             BalanceUpdateOutcome outcome = new BalanceUpdateOutcome(0, EXECUTED_AT);

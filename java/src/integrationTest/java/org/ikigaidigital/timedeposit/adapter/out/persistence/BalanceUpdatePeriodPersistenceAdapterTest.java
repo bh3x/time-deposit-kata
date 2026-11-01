@@ -129,25 +129,16 @@ class BalanceUpdatePeriodPersistenceAdapterTest {
             return jdbc.sql("select count(*) from \"balanceUpdatePeriods\"").query(Integer.class).single();
         }
 
+        // The October row, also in progress, shows that only the named month gets the new token.
         @Test
         void takesOverAnInProgressMonthWithANewToken() {
-            insertInProgress(NOVEMBER, OTHER_TOKEN);
-            adapter.findUnlocked(NOVEMBER);
-
-            adapter.takeOver(NOVEMBER, TOKEN);
-
-            assertThat(adapter.lock(NOVEMBER)).contains(new InProgress(TOKEN));
-        }
-
-        @Test
-        void takesOverOnlyTheNamedMonth() {
             insertInProgress(OCTOBER, OTHER_TOKEN);
             insertInProgress(NOVEMBER, OTHER_TOKEN);
             adapter.findUnlocked(NOVEMBER);
 
             adapter.takeOver(NOVEMBER, TOKEN);
 
-            assertThat(adapter.find(NOVEMBER)).contains(new InProgress(TOKEN));
+            assertThat(adapter.lock(NOVEMBER)).contains(new InProgress(TOKEN));
             assertThat(adapter.find(OCTOBER)).contains(new InProgress(OTHER_TOKEN));
         }
 

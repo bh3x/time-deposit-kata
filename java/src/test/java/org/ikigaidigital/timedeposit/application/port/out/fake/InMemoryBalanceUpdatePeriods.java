@@ -124,7 +124,7 @@ public final class InMemoryBalanceUpdatePeriods implements RecordBalanceUpdatePo
     public void takeOver(YearMonth period, Instant token) {
         calls.add("takeOver");
         if (!(stateOf(period).orElse(null) instanceof InProgress)) {
-            throw new IllegalStateException("balance update period is not in progress");
+            throw new IllegalStateException("balance update period " + period + " is not in progress");
         }
         rows.put(period, new Row(new InProgress(token), null));
     }
