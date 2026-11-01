@@ -27,7 +27,8 @@ An ADR captures one significant decision: its context, the options considered, t
 
 ## Planned decisions
 Numbers are assigned when each ADR is written.
-- Interest calculation design
+- Interest calculation design; decides which known defects of the legacy calculation
+  ([`known-issues.md`](../known-issues.md)) the new interest policies keep or fix
 - Balance update consistency (concurrent runs and writers, idempotency reservation and flow, in-flight `409` and
   stale keys, key check vs lock order, 24-hour cleanup, single-deposit failures such as overflow, scale — see
   ADR-0008); must be accepted before `POST /balance-updates` is implemented; completes the pending scenarios in
