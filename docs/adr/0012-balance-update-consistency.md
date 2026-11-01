@@ -1,6 +1,6 @@
 # ADR-0012: Balance update consistency
 
-- **Status:** Accepted
+- **Status:** Accepted; partly superseded by [ADR-0013](0013-interest-periods.md)
 - **Date:** 2026-11-01
 
 ## Context
