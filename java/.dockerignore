@@ -1,0 +1,8 @@
+# Only the build files and main sources go into the image build (see Dockerfile).
+.gradle
+build
+src/test
+src/integrationTest
+compose.yaml
+Dockerfile
+.dockerignore

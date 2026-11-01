@@ -92,7 +92,7 @@ their level possibly adjusted — by the planned *Balance update consistency* AD
 |---|---|---|
 | R1 | Only the two operations are mapped: an unknown path, `GET /error`, `/v3/api-docs`, `/swagger-ui.html`, `/actuator`, `/actuator/health` and `/index.html` → `404` Problem Details (ADR-0005) | end-to-end |
 | R2 | A wrong method on a known path → `405` Problem Details (ADR-0005) | end-to-end |
-| R3 | A CORS preflight for `POST` with `Idempotency-Key` is answered for the Swagger UI origin¹ | end-to-end (Docker step) |
+| R3 | A CORS preflight for `POST` with `Idempotency-Key` is answered for the Swagger UI origin¹; other origins, headers and methods are rejected (ADR-0010) | web slice (rules) + end-to-end (preflight) |
 | R4 | `HEAD` and `OPTIONS` on both paths are answered from the existing mappings, without extra routes (ADR-0005) | end-to-end |
 | R5 | An unexpected error on either operation → `500` with `application/problem+json`; absent optional fields are omitted (ADR-0003) | web slice (shared handler) |
 

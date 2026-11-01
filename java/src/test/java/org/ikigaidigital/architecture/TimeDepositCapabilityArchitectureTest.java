@@ -15,7 +15,10 @@ import org.ikigaidigital.timedeposit.domain.TimeDepositTerms;
 import org.springframework.stereotype.Controller;
 import org.springframework.stereotype.Service;
 import org.springframework.web.bind.annotation.ControllerAdvice;
+import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry;
+import org.springframework.web.servlet.config.annotation.ViewControllerRegistry;
 
 import static com.tngtech.archunit.core.domain.JavaClass.Predicates.ANNOTATIONS;
 import static com.tngtech.archunit.core.domain.JavaClass.Predicates.belongToAnyOf;
@@ -203,6 +206,21 @@ class TimeDepositCapabilityArchitectureTest {
     @ArchTest
     static final ArchRule noFunctionalEndpoints = noClasses()
             .should().dependOnClassesThat().resideInAPackage("org.springframework.web.servlet.function..");
+
+    // ADR-0005: web configuration is the easiest place to add a route by accident (view controllers, resource
+    // handlers), so it may not touch those registries.
+    @ArchTest
+    static final ArchRule webConfigurationAddsNoRoutes = noClasses()
+            .should().dependOnClassesThat().belongToAnyOf(ViewControllerRegistry.class, ResourceHandlerRegistry.class);
+
+    // ADR-0010: one CORS policy, the global mapping in configuration, so allowed origins have a single source.
+    @ArchTest
+    static final ArchRule noCrossOriginAnnotationsOnClasses = noClasses()
+            .should().beAnnotatedWith(CrossOrigin.class);
+
+    @ArchTest
+    static final ArchRule noCrossOriginAnnotationsOnMethods = noMethods()
+            .should().beAnnotatedWith(CrossOrigin.class);
 
     // Controller advices are part of the REST adapters (ADR-0003 Problem Details), never of the core.
     @ArchTest

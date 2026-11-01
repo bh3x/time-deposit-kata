@@ -1,0 +1,53 @@
+# Local stack (ADR-0010): `docker compose up --build`, then Swagger UI at http://localhost:8081 and the API at
+# http://localhost:8080/api/v1. `docker compose down -v` also removes the database volume.
+name: time-deposit-kata
+
+services:
+  postgres:
+    # Same image as the integration tests (ADR-0009).
+    image: postgres:18.6
+    environment:
+      POSTGRES_DB: timedeposits
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: app  # local-only default, not a secret
+    healthcheck:
+      # Over TCP, as the app connects: during first-start init the server listens on its Unix socket only.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U app -d timedeposits"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    volumes:
+      # PostgreSQL 18 images keep their data below /var/lib/postgresql.
+      - postgres-data:/var/lib/postgresql
+
+  app:
+    build: .
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # Safety net if the database is not yet reachable despite the healthcheck.
+    restart: on-failure
+    environment:
+      # The demo profile adds the seed data (ADR-0006); Flyway creates the schema on startup.
+      SPRING_PROFILES_ACTIVE: demo
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/timedeposits
+      SPRING_DATASOURCE_USERNAME: app
+      SPRING_DATASOURCE_PASSWORD: app
+      # Browser origin of the Swagger UI below (app.cors.allowed-origins).
+      APP_CORS_ALLOWEDORIGINS: http://localhost:8081
+    # Published on localhost only: the API has no authentication.
+    ports:
+      - "127.0.0.1:8080:8080"
+
+  swagger-ui:
+    # A separate client on its own origin: the application serves no documentation (ADR-0005).
+    image: swaggerapi/swagger-ui:v5.34.1
+    environment:
+      SWAGGER_JSON: /spec/openapi.yaml
+    volumes:
+      - ./src/main/resources/openapi/openapi.yaml:/spec/openapi.yaml:ro
+    ports:
+      - "127.0.0.1:8081:8080"
+
+volumes:
+  postgres-data:

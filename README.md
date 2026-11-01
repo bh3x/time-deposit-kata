@@ -1,5 +1,69 @@
 # Time Deposit Refactoring Kata - Take-Home Assignment
 
+## Solution: run and try the API
+The solution is the Java implementation in [`java/`](java/). Design decisions are recorded in [`docs/adr/`](docs/adr/).
+
+### Start the stack
+Prerequisite: Docker (with Compose). No JDK is needed.
+
+```bash
+cd java
+docker compose up --build
+```
+
+The first build downloads Gradle and the dependencies inside the image and takes a few minutes. The stack is ready
+once the log shows `Started TimeDepositApplication`.
+
+| Service | URL | Notes |
+|---|---|---|
+| Swagger UI | http://localhost:8081 | Interactive client for the OpenAPI contract |
+| API | http://localhost:8080/api/v1 | The two operations of the contract |
+| PostgreSQL | inside the stack only | Schema created by Flyway; demo data loaded on startup |
+
+Both ports are published on `localhost` only.
+
+### Verify the stack (smoke check)
+- `docker compose ps` lists `postgres` as healthy and `app` and `swagger-ui` as running.
+- `curl http://localhost:8080/api/v1/time-deposits` returns a JSON array of 15 demo deposits.
+- http://localhost:8081 shows the "XA Bank Time Deposit API" contract.
+- `curl -i http://localhost:8080/actuator/health` returns `404`: the application serves only the two operations.
+
+### Trigger the endpoints with Swagger UI
+1. Open http://localhost:8081 (use `localhost`, not `127.0.0.1`: the API allows cross-origin calls from
+   `http://localhost:8081` only). The contract (`openapi.yaml`) is loaded; keep the server
+   **`http://localhost:8080/api/v1` (Local Docker Compose stack)** selected.
+2. **List all time deposits:** expand `GET /time-deposits` → **Try it out** → **Execute**. The response is a JSON
+   array of deposits with `id`, `planType`, `balance`, `days` and `withdrawals`.
+3. **Apply monthly interest:** expand `POST /balance-updates` → **Try it out** → optionally enter an
+   `Idempotency-Key` (repeating a key returns the first outcome instead of applying interest again) → **Execute**.
+   Then run step 2 again to see the new balances.
+
+> **Current state:** the balance update is implemented in a later step. Until then `POST /balance-updates`
+> answers `500` with a Problem Details body.
+
+### Trigger the endpoints with curl
+```bash
+curl http://localhost:8080/api/v1/time-deposits
+curl -X POST -H "Idempotency-Key: $(uuidgen)" http://localhost:8080/api/v1/balance-updates
+```
+A new key per call applies interest again; reusing a key returns the first outcome. The header is optional.
+
+### Stop and reset
+- `docker compose down` stops the stack; the database volume and its balances are kept.
+- `docker compose down -v` also deletes the database; the next start loads the demo data again.
+
+### Notes
+- The application serves only the two API operations; Swagger UI runs as a separate container (ADR-0005), which
+  the API allows as a cross-origin caller (`app.cors.allowed-origins`, ADR-0010).
+- Run the application without Docker against your own PostgreSQL: `cd java && ./gradlew bootRun` with
+  `SPRING_DATASOURCE_URL`, `SPRING_DATASOURCE_USERNAME` and `SPRING_DATASOURCE_PASSWORD` set, plus
+  `SPRING_PROFILES_ACTIVE=demo` for the demo data (without it the list starts empty). Gradle needs a JDK 17 or
+  newer to start; it downloads the JDK 25 toolchain itself if none is installed.
+- Tests: `cd java && ./gradlew check` runs the unit, architecture and integration tests (Docker required for
+  Testcontainers). See [`docs/testing.md`](docs/testing.md).
+
+---
+
 ## XA Bank Time Deposit
 
 ### Context
