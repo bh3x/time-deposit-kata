@@ -1,6 +1,11 @@
 spring:
   application:
     name: time-deposit-service
+  # ADR-0005: no static-resource handler, so no path is served from the classpath (e.g. /index.html, /favicon.ico).
+  # Spring Boot's /error route is excluded on TimeDepositApplication, where no property can bring it back.
+  web:
+    resources:
+      add-mappings: false
   jpa:
     # The schema is owned by Flyway (ADR-0006); Hibernate only checks that the entities match it.
     hibernate:
