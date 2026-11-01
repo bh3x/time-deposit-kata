@@ -15,6 +15,12 @@
       "Bash(git branch -v:*)",
       "Bash(./gradlew:*)",
       "Bash(./gradlew *)",
+      "Bash(java/gradlew:*)",
+      "Bash(docker compose:*)",
+      "Bash(docker run --rm --network none:*)",
+      "Bash(curl -s -i -X GET http://localhost:*)",
+      "Bash(curl -s -i -X POST http://localhost:*)",
+      "Bash(curl -s -i -X OPTIONS http://localhost:*)",
       "Bash(grep:*)",
       "Bash(find:*)",
       "Bash(ls:*)",
@@ -38,8 +44,7 @@
       "Bash(git rebase:*)",
       "Bash(git reset:*)",
       "Bash(gh pr merge:*)",
-      "Bash(gh pr close:*)",
-      "Bash(docker compose:*)"
+      "Bash(gh pr close:*)"
     ],
     "deny": [
       "Bash(git push --force:*)",

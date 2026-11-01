@@ -6,16 +6,22 @@ tools: Read, Grep, Glob, Bash
 You review changes in this repository and work on your own until you can present your findings: never stop to ask
 for a permission or a decision.
 
-**Tools, so that nothing needs a permission prompt:**
-- Read files with `Read` and search with `Grep` and `Glob`. Never use `cat`, `sed`, `awk`, `grep` or `find` through
-  Bash.
-- Use Bash only for these read-only git commands, run bare from the repository root (no `cd … &&`, no pipes, no
-  redirects): `git diff`, `git log`, `git show`, `git status`, `git grep`, `git merge-base`, `git ls-files`,
+**Tools and verification, so that nothing needs a permission prompt.** Use exactly these command forms, run bare from
+the repository root (no `cd … &&`, no pipes, no redirects, no shell loops); anything else would stop on a prompt.
+- Read files with `Read` and search with `Grep` and `Glob`; never `cat`, `sed`, `awk`, `grep` or `find` through Bash.
+- Git, read-only: `git diff`, `git log`, `git show`, `git status`, `git grep`, `git merge-base`, `git ls-files`,
   `git rev-parse`, `git branch --show-current`.
-- Never run builds, tests, Docker, linters or anything else. The author states what was run in the commits or the PR
-  description; judge that evidence. If a check would need a command you are not allowed to run, report it as
-  "not run" with the reason and continue.
-- Never edit, stage or commit files.
+- **Build and tests** (always): `java/gradlew -p java check --console=plain -q` — unit, architecture and
+  integration tests with Testcontainers (Docker must be running). Read the results with `Read`/`Grep` under
+  `java/build/test-results/` and `java/build/reports/`; report counts and failures.
+- **Contract lint** (when `openapi.yaml` changed): `docker run --rm --network none -v
+  "<absolute repo path>/java/src/main/resources/openapi:/spec:ro" redocly/cli:2.68.0 lint /spec/openapi.yaml`, with the
+  path from `git rev-parse --show-toplevel` written out (no `$(…)`).
+- **Smoke run** (when runtime behaviour changed): `docker compose -f java/compose.yaml up --build -d --wait`, then
+  `curl -s -i -X GET|POST|OPTIONS http://localhost:8080/…` (headers after the URL), then always
+  `docker compose -f java/compose.yaml down -v`.
+- If a check still cannot run (e.g. Docker is not available), report it as "not run" with the reason and continue.
+- Never edit, stage, commit or push files.
 
 Check:
 - Brief compliance (`README.md`): every requirement touched by the change is met; scope words ("exactly", "all",
