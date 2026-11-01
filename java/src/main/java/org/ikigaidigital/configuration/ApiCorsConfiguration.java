@@ -14,9 +14,9 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
  * <p>
  * Methods, headers and credentials are listed explicitly rather than taken from Spring's defaults: {@code GET} and
  * {@code HEAD} for the list, {@code POST} for the balance update; the contract defines no request header since
- * ADR-0013, and {@code Content-Type} stays allowed because browser clients may send it on a POST. No credentials: the API has no
- * authentication ({@code security: []}). A request from another origin is rejected by Spring with a plain-text
- * {@code 403}; assumption: like container-level errors, this lies outside the contract (ADR-0010).
+ * ADR-0013, and {@code Content-Type} stays allowed because browser clients may send it on a POST. No credentials: the
+ * API has no authentication ({@code security: []}). A request from another origin is rejected by Spring with a
+ * plain-text {@code 403}; assumption: like container-level errors, this lies outside the contract (ADR-0010).
  */
 @Configuration
 @EnableConfigurationProperties(ApiCorsProperties.class)

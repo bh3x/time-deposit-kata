@@ -42,7 +42,8 @@ class ApplyMonthlyInterestServiceTest {
     private static final YearMonth NOVEMBER = YearMonth.of(2026, 11);
     private static final YearMonth OCTOBER = YearMonth.of(2026, 10);
     private static final Duration ONE_MICROSECOND = Duration.ofNanos(1_000);
-    private static final BalanceUpdateOutcome STORED = new BalanceUpdateOutcome(3, Instant.parse("2026-11-01T08:00:00Z"));
+    private static final BalanceUpdateOutcome STORED =
+            new BalanceUpdateOutcome(3, Instant.parse("2026-11-01T08:00:00Z"));
 
     private final List<String> calls = new ArrayList<>();
     private final InMemoryTimeDeposits deposits = new InMemoryTimeDeposits(calls);

@@ -52,7 +52,8 @@ public class BalanceUpdatePeriodReservations {
     }
 
     // The month is the UTC calendar month of this moment (ADR-0013, A1: the brief names no zone), whatever zone the
-    // clock carries; the run keeps this month and never re-reads it from the clock.
+    // clock carries; the run keeps this month and never re-reads it from the clock. Only this month is reserved:
+    // months without a run are not applied later (ADR-0013, E1, assumption: the brief defines no interest for them).
     @Transactional
     public Reservation reserve() {
         Instant token = clock.instant().truncatedTo(ChronoUnit.MICROS);

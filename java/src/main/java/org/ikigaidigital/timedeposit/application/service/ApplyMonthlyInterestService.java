@@ -29,6 +29,8 @@ public final class ApplyMonthlyInterestService implements ApplyMonthlyInterestUs
     @Override
     public BalanceUpdateResult applyMonthlyInterest() {
         return switch (reservations.reserve()) {
+            // ADR-0013, B1 (assumption): a later request of an applied month gets 200 with that month's stored
+            // outcome rather than a 409, so every request of a month gets the same answer and retries are harmless.
             case Reservation.Replay replay -> new Succeeded(replay.outcome());
             case Reservation.Busy busy -> new MonthInProgress();
             case Reservation.Reserved reserved -> runReserved(reserved);
