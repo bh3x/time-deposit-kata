@@ -28,6 +28,7 @@ An ADR captures one significant decision: its context, the options considered, t
 | [0012](0012-balance-update-consistency.md) | Balance update consistency | Accepted; partly superseded by 0013, 0014 | 2026-11-01 |
 | [0013](0013-interest-periods.md) | Interest periods | Accepted; partly superseded by 0014 | 2026-11-01 |
 | [0014](0014-replay-completed-month-without-lock.md) | Replay a completed month without a lock | Accepted | 2026-11-01 |
+| [0015](0015-testing-strategy-as-built.md) | Testing strategy as built | Proposed | 2026-11-01 |
 
 ## Planned decisions
 Numbers are assigned when each ADR is written.
