@@ -120,6 +120,13 @@ class TimeDepositCapabilityArchitectureTest {
             .that().areDeclaredInClassesThat().resideOutsideOfPackage("..application.service..")
             .should().beAnnotatedWith("org.springframework.transaction.annotation.Transactional");
 
+    // Decision 6 and ADR-0012, B: @UseCase marks only driving-port implementations; transactional helpers of a use
+    // case are plain @Service beans.
+    @ArchTest
+    static final ArchRule useCaseServicesImplementADrivingPort = classes()
+            .that().areAnnotatedWith(UseCase.class)
+            .should().implement(resideInAPackage("..application.port.in.."));
+
     // Decision 6: @UseCase is a Spring @Service stereotype.
     @ArchTest
     static final ArchRule useCaseIsAServiceStereotype = classes()

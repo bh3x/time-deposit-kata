@@ -1,5 +1,6 @@
 package org.ikigaidigital.configuration;
 
+import org.ikigaidigital.timedeposit.application.port.in.ApplyMonthlyInterestUseCase;
 import org.ikigaidigital.timedeposit.application.port.in.ListTimeDepositsUseCase;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -47,6 +48,9 @@ class ApiCorsConfigurationTest {
 
     @MockitoBean
     private ListTimeDepositsUseCase listTimeDeposits;
+
+    @MockitoBean
+    private ApplyMonthlyInterestUseCase applyMonthlyInterest;
 
     @BeforeEach
     void noDeposits() {
@@ -155,6 +159,8 @@ class ApiCorsConfigurationTest {
         // Without this header the browser hides the error from Swagger UI ("Failed to fetch").
         @Test
         void addsAllowOriginToTheProblemResponseOfPost() {
+            given(applyMonthlyInterest.applyMonthlyInterest("k")).willThrow(new IllegalStateException("run failed"));
+
             assertThat(mvc.post().uri(BALANCE_UPDATES)
                     .header(ORIGIN, SWAGGER_UI)
                     .header("Idempotency-Key", "k"))

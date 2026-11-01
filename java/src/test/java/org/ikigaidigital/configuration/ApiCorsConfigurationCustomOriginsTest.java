@@ -1,5 +1,6 @@
 package org.ikigaidigital.configuration;
 
+import org.ikigaidigital.timedeposit.application.port.in.ApplyMonthlyInterestUseCase;
 import org.ikigaidigital.timedeposit.application.port.in.ListTimeDepositsUseCase;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -26,6 +27,9 @@ class ApiCorsConfigurationCustomOriginsTest {
 
     @MockitoBean
     private ListTimeDepositsUseCase listTimeDeposits;
+
+    @MockitoBean
+    private ApplyMonthlyInterestUseCase applyMonthlyInterest;
 
     @ParameterizedTest(name = "allows configured origin {0}")
     @ValueSource(strings = {"http://a.test", "http://b.test"})

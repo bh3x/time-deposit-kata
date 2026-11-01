@@ -222,15 +222,13 @@ class TimeDepositSchemaTest {
             assertThat(stored).isEqualTo(planType);
         }
 
-        // Known issue #8 (ADR-0011): pins what PostgreSQL does with non-finite balances, which the calculator cannot
-        // round. Observed, not designed: whether the schema should change belongs to the balance update consistency ADR.
-        // The value is cast in SQL, because java.math.BigDecimal (used by TimeDepositRows) cannot hold it.
+        // Known issue #8, scenario S8: non-finite balances, which the calculator cannot round, cannot be stored.
+        // NUMERIC(15,2) rejects the infinities; NaN passes "balance" >= 0 (PostgreSQL sorts NaN above all numbers), so
+        // V2 rejects it explicitly (ADR-0012, F). The value is cast in SQL, because java.math.BigDecimal (used by
+        // TimeDepositRows) cannot hold it.
         @Test
-        void acceptsANotANumberBalance() {
-            insertBasicDepositWithBalance("NaN");
-
-            String stored = jdbc.sql("select \"balance\"::text from \"timeDeposits\"").query(String.class).single();
-            assertThat(stored).isEqualTo("NaN");
+        void rejectsANotANumberBalance() {
+            assertRejected(() -> insertBasicDepositWithBalance("NaN"), CHECK_VIOLATION);
         }
 
         @ParameterizedTest(name = "balance {0} rejected")
@@ -271,6 +269,16 @@ class TimeDepositSchemaTest {
             int deposit = rows.insertDeposit("basic", 31, "100.00");
 
             assertRejected(() -> rows.insertWithdrawal(deposit, amount, "2026-01-01"), CHECK_VIOLATION);
+        }
+
+        // Scenario S8: NaN passes "amount" > 0 as well (it sorts above all numbers), so V2 rejects it (ADR-0012, F).
+        @Test
+        void rejectsANotANumberAmount() {
+            int deposit = rows.insertDeposit("basic", 31, "100.00");
+
+            assertRejected(() -> jdbc.sql("""
+                    insert into "withdrawals" ("timeDepositId", "amount", "date") values (?, 'NaN'::numeric, '2026-01-01')
+                    """).param(deposit).update(), CHECK_VIOLATION);
         }
 
         @Test
