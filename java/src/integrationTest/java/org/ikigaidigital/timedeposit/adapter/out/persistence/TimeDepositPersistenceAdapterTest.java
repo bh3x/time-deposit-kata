@@ -1,10 +1,10 @@
 package org.ikigaidigital.timedeposit.adapter.out.persistence;
 
 import jakarta.persistence.EntityManager;
-import org.ikigaidigital.TimeDeposit;
 import jakarta.persistence.EntityManagerFactory;
 import org.hibernate.SessionFactory;
 import org.hibernate.stat.Statistics;
+import org.ikigaidigital.TimeDeposit;
 import org.ikigaidigital.testcontainers.PostgresContainerConfiguration;
 import org.ikigaidigital.timedeposit.TimeDepositRows;
 import org.ikigaidigital.timedeposit.application.model.TimeDepositView;

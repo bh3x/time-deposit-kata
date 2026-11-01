@@ -32,7 +32,9 @@ class ProblemDetailsHandler {
     // The generated API interfaces carry @Validated, so Spring's AOP method validation checks their parameter
     // constraints (e.g. Idempotency-Key 1-255 characters) and throws ConstraintViolationException, which Spring Boot's
     // handler does not render. It is a client error the contract declares as 400 (verified in the web slice). The
-    // detail names the parameter and the violated constraint, never a method or class name.
+    // detail names the parameter and the violated constraint, never a method or class name. Assumption: only the
+    // generated API raises it today (no other Bean Validation in src/main); once services or entities validate too,
+    // their violations are server errors and this mapping must be narrowed to the REST adapters.
     @ExceptionHandler(ConstraintViolationException.class)
     ProblemDetail handleConstraintViolation(ConstraintViolationException exception) {
         String detail = exception.getConstraintViolations().stream()

@@ -31,8 +31,9 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 
 /**
- * Web slice for {@code GET /api/v1/time-deposits} (docs/testing.md G1–G3, G5–G7): HTTP mapping and the JSON
- * representation of the contract, with the use case mocked. Bodies are compared strictly, so a missing or extra field
+ * Web slice for {@code GET /api/v1/time-deposits} (docs/testing.md G1–G3, G5–G7) and
+ * {@code POST /api/v1/balance-updates} (P2, P3, P7, P9): HTTP mapping and the JSON representation of the contract,
+ * with the use cases mocked. Bodies are compared strictly, so a missing or extra field
  * (e.g. an internal key) fails the test.
  */
 @WebMvcTest(TimeDepositsController.class)

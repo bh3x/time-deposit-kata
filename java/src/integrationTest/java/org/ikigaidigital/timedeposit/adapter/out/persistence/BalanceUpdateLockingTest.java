@@ -20,6 +20,7 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.List;
 import java.util.function.Supplier;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -125,6 +126,25 @@ class BalanceUpdateLockingTest {
 
         whileLockedBy("select 1 from \"idempotencyKeys\" where \"idempotencyKey\" = 'k' for update",
                 () -> assertThat(inTransaction(() -> keys.reserve("k", NOW.plusSeconds(1)))).isFalse());
+    }
+
+    // S6: the JPA balance write and the JdbcClient key statements join the same Spring transaction, so the key's switch
+    // and the balances commit or roll back together (ADR-0006, ADR-0012, E).
+    @Test
+    void balanceWritesAndKeyStatementsRollBackTogether() {
+        int id = new TimeDepositRows(jdbc).insertDeposit("basic", 31, "1000.00");
+
+        new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
+            var deposit = deposits.loadAllForUpdate().getFirst();
+            deposit.setBalance(1000.83);
+            deposits.saveBalances(List.of(deposit));
+            keys.reserve("k", NOW);
+            status.setRollbackOnly();
+        });
+
+        assertThat(jdbc.sql("select \"balance\"::text from \"timeDeposits\" where \"id\" = ?").param(id)
+                .query(String.class).single()).isEqualTo("1000.00");
+        assertThat(jdbc.sql("select count(*) from \"idempotencyKeys\"").query(Integer.class).single()).isZero();
     }
 
     // ADR-0012, A, unverified until here: Hibernate's PESSIMISTIC_WRITE on PostgreSQL locks the deposits

@@ -34,6 +34,8 @@ public final class ApplyMonthlyInterestService implements ApplyMonthlyInterestUs
     @Override
     public BalanceUpdateResult applyMonthlyInterest(String idempotencyKey) {
         Objects.requireNonNull(idempotencyKey, "idempotencyKey");
+        // A separate call, so the purge commits before the reservation: purging inside the reservation's transaction
+        // could let two reservations each delete the other's expired key and then deadlock (ADR-0012, D).
         reservations.purge();
         return switch (reservations.reserve(idempotencyKey)) {
             case Reservation.Replay replay -> new Succeeded(replay.outcome());
