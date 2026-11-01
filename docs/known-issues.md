@@ -33,7 +33,8 @@ Already fixed by the readability refactoring (no behaviour change): the indexed 
 **Readings, not defects** (recorded in code comments and ADRs):
 - "No interest after 1 year" is `days < 366`: day 365 still earns interest; leap years are ignored.
 - "1% interest" is a yearly rate applied monthly (`/ 12`).
-- Each call applies one month of interest, whatever `days` says; calling twice applies it twice. The API guards
-  repeated requests with an optional `Idempotency-Key` (ADR-0004).
+- Each run applies one month of interest, whatever `days` says, and a UTC calendar month is applied at most once:
+  further requests in that month return its outcome ([ADR-0013](adr/0013-interest-periods.md)). Missed months are
+  not applied later.
 - The calculator never advances `days`; the plan-period rules (grace period, student year, premium start) depend
   on whoever maintains `days` (ADR-0004: the API does not advance it either).
