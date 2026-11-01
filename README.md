@@ -3,6 +3,23 @@
 ## Solution: run and try the API
 The solution is the Java implementation in [`java/`](java/). Design decisions are recorded in [`docs/adr/`](docs/adr/).
 
+### Brief → solution
+| Requirement | Where | Verified by |
+|---|---|---|
+| Exactly two endpoints (list, balance update) | Contract [`openapi.yaml`](java/src/main/resources/openapi/openapi.yaml); `TimeDepositsController`; ADR-0002–0005 | Web slice, end-to-end tests; route probes and a route inventory (no other HTTP route) |
+| Tables `timeDeposits`, `withdrawals` | Flyway [`db/migration`](java/src/main/resources/db/migration); ADR-0006 | Schema and persistence tests (Testcontainers) |
+| Interest rules, extensible to new plans | `timedeposit.domain.interest`; ADR-0011 | Policy and registry unit tests; extensibility test |
+| `TimeDeposit` and `updateBalance` unchanged | `TimeDepositCalculator` keeps its signature and delegates | Characterization tests, frozen legacy copy, randomized comparison |
+| Hexagonal architecture, SOLID | ADR-0008 | ArchUnit rules |
+| Concurrent and repeated balance updates | ADR-0012 (row locks, optional `Idempotency-Key`) | Persistence lock tests, end-to-end overlap tests |
+| Assumptions and kept legacy defects | Code comments, ADRs, [`docs/known-issues.md`](docs/known-issues.md) | Pinned by tests, as marked in `known-issues.md` |
+| AI-assisted development | [`AI_USAGE.md`](AI_USAGE.md), [`CLAUDE.md`](CLAUDE.md), [`.claude/`](.claude/) | – |
+
+The scenarios behind the tests are listed in [`docs/testing.md`](docs/testing.md).
+
+Assumption: the API's `id` is a public UUID; the table keeps the brief's integer `id` as an internal key that is
+never exposed (ADR-0004).
+
 ### Start the stack
 Prerequisite: Docker (with Compose). No JDK is needed.
 
