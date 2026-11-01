@@ -1,5 +1,6 @@
 package org.ikigaidigital;
 
+import jakarta.servlet.ServletContext;
 import org.ikigaidigital.testcontainers.PostgresContainerConfiguration;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -8,11 +9,14 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.error.ErrorController;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.Import;
+import org.springframework.web.bind.annotation.RequestMethod;
+import org.springframework.web.context.WebApplicationContext;
 import org.springframework.web.servlet.HandlerMapping;
 import org.springframework.web.servlet.function.support.RouterFunctionMapping;
 import org.springframework.web.servlet.handler.AbstractUrlHandlerMapping;
 import org.springframework.web.servlet.mvc.method.RequestMappingInfoHandlerMapping;
 
+import java.util.Set;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -30,14 +34,28 @@ class RouteInventoryTest {
     @Autowired
     private ApplicationContext context;
 
+    // A mapping without a method matches every method (as Spring Boot's BasicErrorController maps /error), so it is
+    // listed as ANY and fails the exact match instead of disappearing.
     @Test
     void mapsExactlyTheTwoContractOperations() {
         Stream<String> routes = context.getBeansOfType(RequestMappingInfoHandlerMapping.class).values().stream()
                 .flatMap(mapping -> mapping.getHandlerMethods().keySet().stream())
-                .flatMap(info -> info.getMethodsCondition().getMethods().stream()
-                        .flatMap(method -> info.getPatternValues().stream().map(path -> method + " " + path)));
+                .flatMap(info -> {
+                    Set<RequestMethod> methods = info.getMethodsCondition().getMethods();
+                    Stream<String> names = methods.isEmpty() ? Stream.of("ANY") : methods.stream().map(Enum::name);
+                    return names.flatMap(method -> info.getPatternValues().stream().map(path -> method + " " + path));
+                });
 
         assertThat(routes).containsExactlyInAnyOrder("GET /api/v1/time-deposits", "POST /api/v1/balance-updates");
+    }
+
+    // Servlets registered with the container (e.g. Tomcat's default servlet) serve paths no handler mapping shows.
+    @Test
+    void registersOnlyTheDispatcherServletAtTheRoot() {
+        ServletContext servletContext = ((WebApplicationContext) context).getServletContext();
+
+        assertThat(servletContext.getServletRegistrations()).containsOnlyKeys("dispatcherServlet");
+        assertThat(servletContext.getServletRegistration("dispatcherServlet").getMappings()).containsExactly("/");
     }
 
     // Static resources, view controllers, favicon and welcome page would all live in URL-based mappings.

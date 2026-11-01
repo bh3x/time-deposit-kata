@@ -123,9 +123,19 @@ class RouteScopeEndToEndTest {
                 MediaType.TEXT_HTML_VALUE);
 
         assertThat(result.getStatus()).isEqualTo(HttpStatus.NOT_FOUND);
-        assertThat(result.getResponseHeaders().getContentType()).isNotEqualTo(MediaType.TEXT_HTML);
+        MediaType contentType = result.getResponseHeaders().getContentType();
+        assertThat(contentType == null || !contentType.isCompatibleWith(MediaType.TEXT_HTML))
+                .as("content type %s is not HTML", contentType).isTrue();
         assertThat(new String(result.getResponseBodyContent() == null ? new byte[0] : result.getResponseBodyContent(),
                 StandardCharsets.UTF_8)).doesNotContainIgnoringCase("<html");
+    }
+
+    // TRACE would echo the request on every path if the container allowed it; it must stay rejected. Not Problem
+    // Details: the container answers before Spring MVC (accepted in ADR-0005).
+    @ParameterizedTest(name = "TRACE {0} rejected")
+    @ValueSource(strings = {TIME_DEPOSITS, "/no-such-path"})
+    void rejectsTrace(String path) {
+        assertThat(exchange(HttpMethod.TRACE, path).getStatus().is2xxSuccessful()).isFalse();
     }
 
     // R2
@@ -151,14 +161,15 @@ class RouteScopeEndToEndTest {
         assertBalanceUnchanged();
     }
 
-    // R4: HEAD is derived from the GET mapping and has no body.
+    // R4: HEAD is answered from the GET mapping, with the GET's status and content type. Whether a body would follow
+    // cannot be observed (clients never read one for HEAD), and the response carries no Content-Length to compare
+    // (observed), so status and type are what is pinned.
     @Test
-    void answersHeadOnTheListPathWithoutABody() {
+    void answersHeadOnTheListPathFromTheGetMapping() {
         EntityExchangeResult<byte[]> result = exchange(HttpMethod.HEAD, TIME_DEPOSITS);
 
         assertThat(result.getStatus()).isEqualTo(HttpStatus.OK);
         assertThat(result.getResponseHeaders().getContentType()).isEqualTo(MediaType.APPLICATION_JSON);
-        assertThat(result.getResponseBodyContent()).isNullOrEmpty();
     }
 
     // R4: HEAD exists only for GET, so it never runs the balance update.
@@ -196,6 +207,7 @@ class RouteScopeEndToEndTest {
         EntityExchangeResult<byte[]> result = exchange(HttpMethod.OPTIONS, path);
 
         assertNotFoundProblem(result);
+        // getAllow() is empty when the header is missing, which is the point: a 404 names no allowed methods.
         assertThat(result.getResponseHeaders().getAllow()).isEmpty();
     }
 

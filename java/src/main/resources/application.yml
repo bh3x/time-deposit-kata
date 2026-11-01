@@ -1,12 +1,8 @@
 spring:
   application:
     name: time-deposit-service
-  # ADR-0005: the application maps only the two contract operations. Spring Boot's /error route (BasicErrorController
-  # from ErrorMvcAutoConfiguration) is removed rather than argued away; errors handled by Spring MVC are Problem
-  # Details anyway, and errors outside it get the servlet container's default response (accepted in ADR-0005).
-  autoconfigure:
-    exclude: org.springframework.boot.webmvc.autoconfigure.error.ErrorMvcAutoConfiguration
   # ADR-0005: no static-resource handler, so no path is served from the classpath (e.g. /index.html, /favicon.ico).
+  # Spring Boot's /error route is excluded on TimeDepositApplication, where no property can bring it back.
   web:
     resources:
       add-mappings: false

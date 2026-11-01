@@ -206,7 +206,7 @@ class TimeDepositCapabilityArchitectureTest {
 
     // ADR-0005: the application maps only the contract's operations, so request mappings exist only in the generated
     // API and no functional endpoints are declared. Which routes are actually reachable (incl. /error and static
-    // resources) is left to the end-to-end test of the route-scope step.
+    // resources) is checked in the running context by RouteScopeEndToEndTest and RouteInventoryTest.
     @ArchTest
     static final ArchRule requestMappingsOnlyInTheGeneratedApi = noMethods()
             .that().areDeclaredInClassesThat().resideOutsideOfPackage("org.ikigaidigital.shared.adapter.in.rest.api..")
