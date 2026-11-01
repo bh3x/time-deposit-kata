@@ -24,15 +24,18 @@
       "Bash(git commit:*)",
       "Bash(git switch:*)",
       "Bash(git checkout -b:*)",
-      "Bash(git checkout main)"
+      "Bash(git checkout main)",
+      "Bash(git push:*)",
+      "Bash(gh pr create:*)"
     ],
     "ask": [
-      "Bash(git push:*)",
+      "Bash(git push origin --delete:*)",
       "Bash(git checkout:*)",
       "Bash(git merge:*)",
       "Bash(git rebase:*)",
       "Bash(git reset:*)",
-      "Bash(gh pr:*)",
+      "Bash(gh pr merge:*)",
+      "Bash(gh pr close:*)",
       "Bash(docker compose:*)"
     ],
     "deny": [

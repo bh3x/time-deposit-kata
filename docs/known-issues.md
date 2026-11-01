@@ -7,8 +7,8 @@ by accident; changing it changes behaviour and needs a decision (an ADR), not a 
 `org.ikigaidigital.TimeDepositCalculator.updateBalance` must keep its behaviour identical (CLAUDE.md hard
 constraints). Its business rules match the brief; the defects below are numeric and robustness issues. They are
 preserved in the refactored class and pinned by `TimeDepositCalculatorCharacterizationTest` (plus the frozen legacy
-copy and the randomized comparison). Which of them the new interest policies keep or fix is decided in the planned
-*Interest calculation design* ADR ([ADR index](adr/README.md#planned-decisions)).
+copy and the randomized comparison). [ADR-0011](adr/0011-interest-calculation-design.md) (*Interest calculation
+design*) keeps them for today's plans in the new interest policies; fixing one needs an ADR that supersedes it.
 
 Today no production code calls the calculator: `POST /balance-updates` is still a placeholder. "Planned" mitigations
 arrive with that step.
@@ -22,8 +22,9 @@ arrive with that step.
 | 5 | A negative balance gets negative interest | basic `-150.00`, 31 days → `-150.13` | `negativeBalanceGetsNegativeInterestRoundedSymmetrically` | `CHECK ("balance" >= 0)` | – | Reject negative balances, or pay no interest on them |
 | 6 | Unknown plan types — including other casings, which the exact matching the brief prescribes treats as unknown — are accepted silently and earn nothing | `"Basic"`, `"STUDENT"`, `" basic"`, `"gold"` keep their balance | `UnknownPlans.noInterest` | – (no `CHECK` on `"planType"`, by design: ADR-0006) | – | Report or reject plan types without a policy |
 | 7 | No atomicity across the list: when a deposit fails, the deposits before it are already updated | `[basic ok, null plan]` → the first balance is updated, then the call throws | `depositsBeforeAFailingOneAreAlreadyUpdated` | – | The POST step runs the update in one transaction (ADR-0008 rule 7; scenario S6 pending) | Validate all deposits before changing any |
-| 8 | A `NaN` or infinite balance throws `NumberFormatException` when the interest is rounded (known plan after the grace period), but passes through silently for unknown plans or within the grace period | basic, `NaN`, 31 days throws; `"gold"`, `NaN` keeps `NaN` | – (not pinned) | Probably the read path, which maps `NUMERIC` to `BigDecimal` (unverified: PostgreSQL `numeric` can store `NaN`, and `NaN >= 0` holds there) | – | Validate input up front; decide in the Interest calculation design whether the schema must exclude `NaN` |
+| 8 | A `NaN` or infinite balance throws `NumberFormatException` when the interest is rounded (known plan after the grace period), but passes through silently for unknown plans or within the grace period | basic, `NaN`, 31 days throws; `"gold"`, `NaN` keeps `NaN` | – (not pinned) | Probably the read path, which maps `NUMERIC` to `BigDecimal` (unverified: PostgreSQL `numeric` can store `NaN`, and `NaN >= 0` holds there) | – | Validate input up front; whether the schema must exclude `NaN` is checked when #8 is pinned (ADR-0011) |
 | 9 | `updateBalance(null)` throws `NullPointerException` | `updateBalance(null)` | – (not pinned) | – | The POST step passes the list it loaded, never `null` | Reject `null` explicitly |
+| 10 | A `null` element in the list throws `NullPointerException` (when its days are read); deposits before it are already updated (#7) | `updateBalance(Arrays.asList(deposit, null))` | – (not pinned; ADR-0011 pins the exception type before the refactoring) | – | The POST step passes the deposits it loaded, never `null` | Reject `null` elements explicitly |
 
 Already fixed by the readability refactoring (no behaviour change): the indexed loop (`xs.get(i)`, O(n²) on a
 `LinkedList`) is a for-each loop; the misleading `interest +=` is a single assignment per plan.
