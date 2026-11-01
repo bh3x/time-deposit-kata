@@ -21,7 +21,8 @@ flowchart LR
   app["Time Deposit Service<br/>Java 25 · Spring Boot 4.1<br/>(ADR-0007)"] -- "JDBC / JPA" --> db[("PostgreSQL<br/>timeDeposits · withdrawals · balanceUpdatePeriods<br/>(ADR-0006, ADR-0013)")]
 ```
 - The application serves exactly the two contract operations; Swagger UI runs as its own container
-  (ADR-0005). How the UI reaches the API (server URL, CORS) is settled in the Docker step.
+  (ADR-0005). The UI reaches the API through the contract's server URL `http://localhost:8080/api/v1`, with CORS
+  allowing the UI's origin (ADR-0010).
 - Schema and demo seed data are applied by Flyway (ADR-0006).
 
 ## 3. Components (C4 level 3)

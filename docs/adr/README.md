@@ -36,3 +36,16 @@ Numbers are assigned when each ADR is written.
   in-memory short-circuit for duplicate balance updates in a completed month (the month table of ADR-0013 stays the
   truth), CORS exposure of `Retry-After`, and a reverse proxy as the production complement for per-client and
   multi-instance limits. Until then the system is bounded only by its thread and connection pools.
+- Test package boundaries (ADR-0008): ArchUnit checks production classes only (and the integration test classes are
+  not on the ArchUnit suite's classpath), so an integration test in `adapter.out.persistence` could depend on
+  `application.service` unnoticed; the existing convention (ADR-0008, `docs/testing.md`) says where tests live, not
+  what they may depend on. Options: extend the rules to test classes, add a dependency rule to that convention, or
+  leave it to review.
+- Advertised methods (ADR-0005): a CORS preflight answers on both paths with the servlet-wide
+  `Allow: GET, HEAD, POST, PUT, DELETE, OPTIONS, PATCH`, not derived from the two mappings as ADR-0005 assumes
+  (`PUT`, `DELETE` and `PATCH` get `405`); the global CORS mapping advertises `GET,HEAD,POST` on both paths. Options:
+  a per-path `Allow` on preflight responses (custom preflight handling), a per-path CORS mapping (changes only
+  `Access-Control-Allow-Methods`), or accepting the framework default; then pin the result in a test.
+- Code style enforcement (tooling step): lines over 120 characters exist and nothing enforces a limit. Options:
+  `.editorconfig` only (editor hint), Checkstyle or Spotless in `./gradlew check` (a new build dependency, approved
+  separately).
