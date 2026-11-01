@@ -2,6 +2,7 @@ plugins {
     java
     jacoco
     alias(libs.plugins.spring.boot)
+    alias(libs.plugins.openapi.generator)
 }
 
 group = "org.ikigaidigital"
@@ -24,6 +25,56 @@ dependencies {
     implementation(libs.spring.boot.starter.flyway)
     implementation(libs.flyway.database.postgresql)
     runtimeOnly(libs.postgresql)
+    // REST adapter (ADR-0002): Spring MVC for the generated interface, Bean Validation for its constraints
+    // (e.g. the Idempotency-Key length).
+    implementation(libs.spring.boot.starter.webmvc)
+    implementation(libs.spring.boot.starter.validation)
+}
+
+// Contract first (ADR-0002, ADR-0008 rule 6): the API interface and models are generated from openapi.yaml on every
+// build and never edited or committed. Only interfaces, no default methods, so an operation added to the contract
+// fails compilation until a controller implements it.
+val generatedOpenApiDir = layout.buildDirectory.dir("generated/openapi")
+
+openApiGenerate {
+    generatorName = "spring"
+    inputSpec = layout.projectDirectory.file("src/main/resources/openapi/openapi.yaml")
+    outputDir = generatedOpenApiDir
+    apiPackage = "org.ikigaidigital.shared.adapter.in.rest.api"
+    modelPackage = "org.ikigaidigital.shared.adapter.in.rest.model"
+    // ADR-0002: generated models end in Dto (e.g. TimeDepositDto), so they never clash with domain classes such as
+    // the legacy TimeDeposit; schema names in the contract stay suffix-free.
+    modelNameSuffix = "Dto"
+    // Removed or renamed schemas must not leave stale classes behind that still compile.
+    cleanupOutput = true
+    configOptions = mapOf(
+        "interfaceOnly" to "true",
+        "skipDefaultInterface" to "true",
+        "useSpringBoot4" to "true",
+        "useJackson3" to "true",
+        // One interface per tag, i.e. per capability (ADR-0008 rule 6).
+        "useTags" to "true",
+        "useBeanValidation" to "true",
+        // JSpecify, as Spring Framework 7 uses: its org.springframework.lang.Nullable is deprecated (-Werror).
+        "useJspecify" to "true",
+        // The base path comes from the contract's server URL (/api/v1), not from the controller.
+        "requestMappingMode" to "api_interface",
+        // Reproducible output: no build timestamp in @Generated.
+        "hideGenerationTimestamp" to "true",
+        // No jackson-databind-nullable dependency: the contract has no nullable fields.
+        "openApiNullable" to "false",
+        // ADR-0005: the application publishes no documentation, so no springdoc or Swagger annotations.
+        "documentationProvider" to "none",
+        "annotationLibrary" to "none",
+    )
+}
+
+// Derived from the task, so every task that consumes the main sources (e.g. compileJava) depends on the generator
+// without an explicit dependsOn.
+sourceSets {
+    main {
+        java.srcDir(tasks.named("openApiGenerate").map { generatedOpenApiDir.get().dir("src/main/java") })
+    }
 }
 
 tasks.withType<JavaCompile>().configureEach {
@@ -40,6 +91,8 @@ testing {
             dependencies {
                 implementation(libs.assertj.core)
                 implementation(libs.archunit.junit5)
+                // Web slice tests: @WebMvcTest, MockMvcTester, @MockitoBean (ADR-0009).
+                implementation(libs.spring.boot.starter.webmvc.test)
             }
         }
 
@@ -53,6 +106,8 @@ testing {
                 implementation(libs.spring.boot.starter.data.jpa.test)
                 implementation(libs.spring.boot.testcontainers)
                 implementation(libs.testcontainers.postgresql)
+                // End-to-end tests over HTTP (ADR-0009).
+                implementation(libs.spring.boot.resttestclient)
             }
             targets {
                 all {
@@ -82,6 +137,10 @@ tasks.named<JacocoReport>("jacocoTestReport") {
     // Both suites (ADR-0009): unit and architecture tests plus the Testcontainers integration tests.
     dependsOn(tasks.named("test"), tasks.named("integrationTest"))
     executionData(tasks.named("test").get(), tasks.named("integrationTest").get())
+    // Generated OpenAPI code is not ours to cover; it would only dilute the report.
+    classDirectories.setFrom(sourceSets.main.get().output.classesDirs.asFileTree.matching {
+        exclude("org/ikigaidigital/shared/adapter/in/rest/api/**", "org/ikigaidigital/shared/adapter/in/rest/model/**")
+    })
     reports {
         xml.required = true
         html.required = true

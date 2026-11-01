@@ -12,7 +12,10 @@ import org.ikigaidigital.shared.application.UseCase;
 import org.ikigaidigital.timedeposit.application.model.TimeDepositView;
 import org.ikigaidigital.timedeposit.application.model.WithdrawalView;
 import org.ikigaidigital.timedeposit.domain.TimeDepositTerms;
+import org.springframework.stereotype.Controller;
 import org.springframework.stereotype.Service;
+import org.springframework.web.bind.annotation.ControllerAdvice;
+import org.springframework.web.bind.annotation.RequestMapping;
 
 import static com.tngtech.archunit.core.domain.JavaClass.Predicates.ANNOTATIONS;
 import static com.tngtech.archunit.core.domain.JavaClass.Predicates.belongToAnyOf;
@@ -120,7 +123,16 @@ class TimeDepositCapabilityArchitectureTest {
             .should().dependOnClassesThat()
             .resideInAnyPackage("jakarta.persistence..", "org.springframework.data..", "org.hibernate..");
 
-    // Implied by the rule above (annotations are dependencies); kept for its clearer failure message.
+    // Rule 5: the types generated from openapi.yaml appear only in REST adapters, so the contract's representation
+    // never leaks into the application or the domain.
+    @ArchTest
+    static final ArchRule generatedOpenApiTypesOnlyInRestAdapters = noClasses()
+            .that().resideOutsideOfPackage("..adapter.in.rest..")
+            .should().dependOnClassesThat().resideInAnyPackage(
+                    "org.ikigaidigital.shared.adapter.in.rest.api..",
+                    "org.ikigaidigital.shared.adapter.in.rest.model..");
+
+    // Implied by the JPA rule above (annotations are dependencies); kept for its clearer failure message.
     @ArchTest
     static final ArchRule entitiesOnlyInPersistenceAdapters = classes()
             .that().areAnnotatedWith(Entity.class)
@@ -146,6 +158,57 @@ class TimeDepositCapabilityArchitectureTest {
     static final ArchRule drivenAdaptersDoNotDependOnDrivingAdapters = noClasses()
             .that().resideInAPackage("..adapter.out..")
             .should().dependOnClassesThat().resideInAPackage("..adapter.in..");
+
+    @ArchTest
+    static final ArchRule drivingAdaptersDoNotDependOnDrivenAdapters = noClasses()
+            .that().resideInAPackage("..adapter.in..")
+            .should().dependOnClassesThat().resideInAPackage("..adapter.out..");
+
+    // Rule 1, stricter for the REST adapter: within the project it uses only use cases, the read model, the domain,
+    // the kernel and shared technical code (incl. the generated API) — never services, driven ports or adapters, and
+    // not the calculator either: interest is applied through a use case, not from a controller.
+    @ArchTest
+    static final ArchRule restAdapterUsesOnlyUseCasesModelsAndDomain = classes()
+            .that().resideInAPackage("org.ikigaidigital.timedeposit.adapter.in.rest..")
+            .should().onlyDependOnClassesThat(
+                    not(resideInAPackage("org.ikigaidigital.."))
+                            .or(resideInAnyPackage(
+                                    "org.ikigaidigital.timedeposit.adapter.in.rest..",
+                                    "org.ikigaidigital.timedeposit.application.port.in..",
+                                    "org.ikigaidigital.timedeposit.application.model..",
+                                    "org.ikigaidigital.timedeposit.domain..",
+                                    "org.ikigaidigital.shared.."))
+                            .or(belongToAnyOf(TimeDeposit.class)));
+
+    // Rule 6: every controller is a REST adapter implementing a generated API interface.
+    @ArchTest
+    static final ArchRule controllersImplementTheGeneratedApi = classes()
+            .that().areMetaAnnotatedWith(Controller.class)
+            .should().resideInAPackage("..adapter.in.rest..")
+            .andShould().implement(resideInAPackage("org.ikigaidigital.shared.adapter.in.rest.api.."));
+
+    // ADR-0005: the application maps only the contract's operations, so request mappings exist only in the generated
+    // API and no functional endpoints are declared. Which routes are actually reachable (incl. /error and static
+    // resources) is left to the end-to-end test of the route-scope step.
+    @ArchTest
+    static final ArchRule requestMappingsOnlyInTheGeneratedApi = noMethods()
+            .that().areDeclaredInClassesThat().resideOutsideOfPackage("org.ikigaidigital.shared.adapter.in.rest.api..")
+            .should().beMetaAnnotatedWith(RequestMapping.class);
+
+    @ArchTest
+    static final ArchRule classLevelRequestMappingsOnlyInTheGeneratedApi = noClasses()
+            .that().resideOutsideOfPackage("org.ikigaidigital.shared.adapter.in.rest.api..")
+            .should().beMetaAnnotatedWith(RequestMapping.class);
+
+    @ArchTest
+    static final ArchRule noFunctionalEndpoints = noClasses()
+            .should().dependOnClassesThat().resideInAPackage("org.springframework.web.servlet.function..");
+
+    // Controller advices are part of the REST adapters (ADR-0003 Problem Details), never of the core.
+    @ArchTest
+    static final ArchRule controllerAdvicesOnlyInRestAdapters = classes()
+            .that().areMetaAnnotatedWith(ControllerAdvice.class)
+            .should().resideInAPackage("..adapter.in.rest..");
 
     // Decision 4 (G6 groundwork): the read model never exposes the mutable legacy object or an internal key.
     @ArchTest

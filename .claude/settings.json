@@ -9,7 +9,16 @@
       "Bash(git branch -a)",
       "Bash(git branch --list:*)",
       "Bash(git branch -v:*)",
-      "Bash(./gradlew:*)"
+      "Bash(./gradlew:*)",
+      "Bash(grep:*)",
+      "Bash(find:*)",
+      "Bash(ls:*)",
+      "Bash(head:*)",
+      "Bash(tail:*)",
+      "Bash(wc:*)",
+      "Bash(sort:*)",
+      "Bash(uniq:*)",
+      "Bash(cut:*)"
     ],
     "ask": [
       "Bash(git add:*)",
@@ -38,6 +47,10 @@
       "Bash(rm -R*)",
       "Bash(rm --recursive*)",
       "Bash(cat *.env*)",
+      "Bash(find * -delete*)",
+      "Bash(find * -exec*)",
+      "Bash(find * -execdir*)",
+      "Bash(find * -ok*)",
       "Read(**/.env)",
       "Read(**/.env.*)"
     ]

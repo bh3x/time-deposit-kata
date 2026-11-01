@@ -1,6 +1,7 @@
 package org.ikigaidigital.timedeposit.adapter.out.persistence;
 
 import org.ikigaidigital.testcontainers.PostgresContainerConfiguration;
+import org.ikigaidigital.timedeposit.TimeDepositRows;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;

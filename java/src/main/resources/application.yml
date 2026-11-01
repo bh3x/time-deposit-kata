@@ -7,3 +7,8 @@ spring:
       ddl-auto: validate
     # No lazy loading during web rendering: entities never leave the persistence adapter (ADR-0008).
     open-in-view: false
+  # Spring MVC's own errors (e.g. 405) as RFC 9457 Problem Details (ADR-0003); other exceptions are handled by
+  # shared.adapter.in.rest.ProblemDetailsHandler.
+  mvc:
+    problemdetails:
+      enabled: true

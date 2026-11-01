@@ -5,6 +5,7 @@ import jakarta.persistence.EntityManagerFactory;
 import org.hibernate.SessionFactory;
 import org.hibernate.stat.Statistics;
 import org.ikigaidigital.testcontainers.PostgresContainerConfiguration;
+import org.ikigaidigital.timedeposit.TimeDepositRows;
 import org.ikigaidigital.timedeposit.application.model.TimeDepositView;
 import org.ikigaidigital.timedeposit.application.model.WithdrawalView;
 import org.junit.jupiter.api.BeforeEach;
