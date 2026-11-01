@@ -32,4 +32,5 @@ Numbers are assigned when each ADR is written.
   stale keys, key check vs lock order, 24-hour cleanup, single-deposit failures such as overflow, scale — see
   ADR-0008); must be accepted before `POST /balance-updates` is implemented; completes the pending scenarios in
   `docs/testing.md` (P9–P12, S6); records that the idempotency rows have exactly two states (`V1__schema.sql`,
-  stricter than ADR-0006's CHECK formula, as its prose describes)
+  stricter than ADR-0006's CHECK formula, as its prose describes); decides whether the schema must exclude `NaN`
+  and infinite balances (known issue #8, ADR-0011)

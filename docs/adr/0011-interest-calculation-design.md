@@ -38,6 +38,9 @@ Five questions, each with its options; the labels are used in the decision below
 **C. Grace period** ("no interest for the first 30 days for any existing plans")
 - **C1. Global in the calculator** — as today; a future plan with another grace period needs a calculator change.
 - **C2. Per policy, default 30** — identical for today's plans; matches the word "existing".
+- **C3. Grace decorator** — a wrapper that pays nothing within the grace period and delegates otherwise; no policy
+  can forget the check, but every registration needs the wrapper and today's parameterised policy would hold its
+  day window in two places.
 
 **D. Policy contract**
 - **D1. Unrounded `double` interest; the calculator rounds** — keeps `balance × rate / 12` in `double` and the
@@ -47,16 +50,18 @@ Five questions, each with its options; the labels are used in the decision below
 **E. Registration**
 - **E1. Explicit composition in the domain** — a factory lists the plans; the `configuration` package builds the
   calculator bean.
-- **E2. Spring collects `@Component` policies** — less code per plan, but puts Spring into the domain.
+- **E2. Spring collects the policies** — either as `@Component` classes (puts Spring into the domain) or as `@Bean`
+  methods in `configuration` injected as a map (domain stays clean, but the plan list is spread over bean methods
+  and the plan-type key over bean names).
 
 ## Decision
 | Question | Chosen | Not chosen | Main reason |
 |---|---|---|---|
 | A. Adding a plan | **A1** additive code | A2 data-driven — **deferred** | "Complexities" are new kinds of rules, which only code expresses; no requirement to change plans without a release; fits the deadline |
 | B. Policy shape | **B2** parameterised policy + own classes for new rules | B1 one class per plan; B3 enum | Today's plans share one shape: a rate-only plan is one registration; an enum is closed |
-| C. Grace period | **C2** per policy, default 30 | C1 global | Identical today; a future plan may use another grace period without touching the calculator |
+| C. Grace period | **C2** per policy, default 30 | C1 global; C3 decorator | Identical today; a future plan may use another grace period without touching the calculator |
 | D. Policy contract | **D1** unrounded `double`, calculator rounds | D2 rounded `BigDecimal` | Behaviour stays identical by construction; one rounding point |
-| E. Registration | **E1** explicit composition | E2 Spring components | Domain stays framework-free (ADR-0008); the list of plans is readable in one place |
+| E. Registration | **E1** explicit composition | E2 Spring-collected policies | Domain stays framework-free (ADR-0008); the list of plans and their keys is readable in one place |
 
 ### A. Adding a plan: A1, additive code; A2 deferred
 **Why A1:**
@@ -93,14 +98,21 @@ own rule classes stay in code.
 
 ### B. Policy shape: B2, parameterised policy
 `RateWindowPolicy(annualRate, gracePeriodDays, minDaysExclusive, maxDaysExclusive)` expresses all three plans:
-`basic` (0.01, 30, –, –), `student` (0.03, 30, –, 366), `premium` (0.05, 30, 45, –), with open bounds where a plan has
-none. A new plan with another rate or window is one registration; a new kind of rule gets its own `InterestPolicy`
-class. B1 would add a class per rate-only plan; B3 cannot be extended without editing the enum.
+`basic` (0.01, 30, –, –), `student` (0.03, 30, –, 366), `premium` (0.05, 30, 45, –). A new plan with another rate or
+window is one registration; a new kind of rule gets its own `InterestPolicy` class. B1 would add a class per rate-only
+plan; B3 cannot be extended without editing the enum.
+- **Open bounds ("–") are absent values** (`OptionalInt.empty()`), never a sentinel such as `Integer.MAX_VALUE`: with
+  a sentinel, `days < max` would stop basic and premium at `days == Integer.MAX_VALUE`, where the legacy code still
+  pays.
+- **Grace period and minimum days are both lower bounds** (premium starts after max(30, 45) days). They stay separate
+  because the grace period is the brief's rule for every existing plan, while the minimum belongs to one plan.
 
 ### C. Grace period: C2, per policy
-Each policy carries its grace period; today's three use 30, so the result is identical. The brief limits the 30-day
-rule to "existing plans", so a future plan may define another grace period — with C1 that would mean editing the
-calculator.
+Each policy carries its grace period; today's three use `InterestPolicies.DEFAULT_GRACE_PERIOD_DAYS` (30), so the
+result is identical. The brief limits the 30-day rule to "existing plans", so a future plan may define another grace
+period — with C1 that would mean editing the calculator. C3 would guarantee the check for every policy, but it
+splits `RateWindowPolicy`'s day window over two objects; instead, a policy class with its own rule must apply its
+grace period itself, which its unit tests show (both sides of the boundary).
 
 ### D. Policy contract: D1, unrounded `double`
 Policies return one month of interest, unrounded, computed as `balance × annualRate / 12` in this order in `double`.
@@ -110,7 +122,9 @@ existing plans.
 
 ### E. Registration: E1, explicit composition
 `InterestPolicies.defaults()` in the domain lists the plans; a `@Configuration` class in `configuration` builds the
-calculator bean from it for the balance update use case. Policies carry no Spring annotation, which E2 would need.
+calculator bean from it for the balance update use case. Policies carry no Spring annotation. E2 as `@Component`
+classes would put Spring into the domain; E2 as `@Bean` methods would keep it clean but spread the plan list and
+its keys over bean definitions, for no gain while plans are added by code (A1).
 
 ### Resulting design
 Types in `org.ikigaidigital.timedeposit.domain.interest` (plain Java):
@@ -120,14 +134,24 @@ Types in `org.ikigaidigital.timedeposit.domain.interest` (plain Java):
 - `RateWindowPolicy` — the B2 policy above.
 - `NoInterestPolicy` — pays nothing; used for unknown plan types.
 - `InterestPolicies` — maps the exact, case-sensitive plan type to its policy; unknown types get `NoInterestPolicy`;
-  `defaults()` registers today's three plans.
+  `defaults()` registers today's three plans. **Immutable** once built and safe to share between threads (the
+  calculator is a singleton bean); building it **rejects** duplicate, `null` and blank plan types and `null`
+  policies.
 
 Rules that keep the legacy behaviour:
-- **`null` plan type:** `InterestPolicies` returns a policy that pays nothing within the default grace period and
+- **`null` plan type:** `InterestPolicies` checks for `null` **before any map lookup** (immutable maps such as
+  `Map.copyOf` throw on `get(null)`) and returns a policy that pays nothing within the default grace period and
   throws `NullPointerException` after it (known issue #3) — kept in the registry, not as a special case in the
   calculator.
 - **Calculator:** `TimeDepositCalculator` keeps its signature and its public no-argument constructor (which uses
   `InterestPolicies.defaults()`); a second constructor takes an `InterestPolicies`. It holds no plan knowledge.
+- **One deposit at a time, always written:** for each deposit, in list order, the calculator computes the interest
+  and sets `getBalance() + rounded interest` — also when the interest is `0.0`. Skipping the write would stop a
+  `null` balance from throwing within the grace period (known issue #4) and keep `-0.0` instead of `+0.0`;
+  computing all interests before writing any would change which deposits are already updated when one fails
+  (known issue #7).
+- **`null` elements in the list:** wrapping each deposit for the policies (`ReadOnlyTimeDeposit`) still throws
+  `NullPointerException`, as today, but with another message (known issue #10); only the exception type is kept.
 - **Known defects stay** for the existing plans, as the brief requires. Fixing one for them changes balances and needs
   an ADR that supersedes this one; a future plan may use a different policy without them.
 - **`NaN` balances** (known issue #8): whether PostgreSQL's `numeric` column can hold `NaN` despite
@@ -137,11 +161,19 @@ Rules that keep the legacy behaviour:
 Tests for the refactoring (ADR-0009):
 - characterization suite, frozen copy and randomized comparison stay green unchanged;
 - pin known issues #8 (`NaN`) and #9 (`null` list) first, so the refactoring cannot change them silently;
-- unit tests per policy on both sides of every boundary (30/31, 45/46, 365/366), unknown and differently cased plan
-  types, `null` plan type within and after the grace period;
+- pin known issue #10 (`null` element, exception type only);
+- unit tests per policy on both sides of every boundary (30/31, 45/46, 365/366) and at `Integer.MAX_VALUE` days for
+  basic and premium (open bounds); unknown and differently cased plan types; `null` plan type within and after the
+  grace period;
+- registry tests: duplicate, `null` and blank plan types and `null` policies are rejected; the registry cannot be
+  changed after it is built;
 - an extensibility test that registers an extra plan without changing any existing class (test only: the brief
   defines no new plan);
-- ArchUnit: `domain.interest` depends only on the JDK and `timedeposit.domain`; the calculator holds no plan types.
+- ArchUnit: `domain.interest` depends only on the JDK and `timedeposit.domain`; the calculator depends on
+  `InterestPolicies` and `InterestPolicy` only, not on concrete policies; the existing rule
+  `calculatorDependsOnlyOnTheJdkAndTimeDeposit` is widened accordingly. Plan-type literals outside
+  `domain.interest` are a review item (ArchUnit sees dependencies, not string literals).
+- the warning against precomputing a monthly rate (`rate / 12`) is repeated as a code comment in `RateWindowPolicy`.
 
 ## Consequences
 - **A new plan of the same shape** is one `RateWindowPolicy` registration; **a new kind of rule** is one new
@@ -150,4 +182,5 @@ Tests for the refactoring (ADR-0009):
 - **Limit:** policies see only plan type, balance and days. Rules that need withdrawals, dates or several deposits
   require a new domain entry point behind the use case — never a change to `TimeDeposit` or `updateBalance`.
 - The refactoring is a pure refactoring under green tests (CLAUDE.md rule 11): a `refactor/interest-policies` step.
-- [`known-issues.md`](../known-issues.md) points here for the decision on each defect.
+- [`known-issues.md`](../known-issues.md) points here for the decision to keep the defects for today's plans.
+- The calculator's comment that leaves the grace-period question to this ADR is updated in the refactoring step.
