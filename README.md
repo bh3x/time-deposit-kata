@@ -11,7 +11,7 @@ The solution is the Java implementation in [`java/`](java/). Design decisions ar
 | Interest rules, extensible to new plans | `timedeposit.domain.interest`; ADR-0011 | Policy and registry unit tests; extensibility test |
 | `TimeDeposit` and `updateBalance` unchanged | `TimeDepositCalculator` keeps its signature and delegates | Characterization tests, frozen legacy copy, randomized comparison |
 | Hexagonal architecture, SOLID | ADR-0008 | ArchUnit rules |
-| Concurrent and repeated balance updates | ADR-0012 (row locks, optional `Idempotency-Key`) | Persistence lock tests, end-to-end overlap tests |
+| Concurrent and repeated balance updates | ADR-0012 (row locks), ADR-0013 (at most once per calendar month) | Persistence lock tests, end-to-end overlap tests |
 | Assumptions and kept legacy defects | Code comments, ADRs, [`docs/known-issues.md`](docs/known-issues.md) | Pinned by tests, as marked in `known-issues.md` |
 | AI-assisted development | [`AI_USAGE.md`](AI_USAGE.md), [`CLAUDE.md`](CLAUDE.md), [`.claude/`](.claude/) | – |
 
@@ -52,20 +52,22 @@ Both ports are published on `localhost` only.
    **`http://localhost:8080/api/v1` (Local Docker Compose stack)** selected.
 2. **List all time deposits:** expand `GET /time-deposits` → **Try it out** → **Execute**. The response is a JSON
    array of deposits with `id`, `planType`, `balance`, `days` and `withdrawals`.
-3. **Apply monthly interest:** expand `POST /balance-updates` → **Try it out** → optionally enter an
-   `Idempotency-Key` (repeating a key returns the first outcome instead of applying interest again) → **Execute**.
-   Then run step 2 again to see the new balances.
+3. **Apply monthly interest:** expand `POST /balance-updates` → **Try it out** → **Execute**. Then run step 2 again
+   to see the new balances.
 
    The response is `200` with `processedCount` (all deposits, including unchanged ones) and `executedAt` (UTC).
-   Repeating a key whose request is still running gives `409`; a key longer than 255 characters or empty gives `400`.
-   Each call without a key applies one more month of interest; runs never overlap (ADR-0012).
+   Interest is applied **at most once per calendar month (UTC)**: executing it again in the same month returns that
+   month's outcome without changing any balance; while the month's run is still in progress the answer is `409`
+   (ADR-0013). The next month's first request applies the next month.
 
 ### Trigger the endpoints with curl
 ```bash
 curl http://localhost:8080/api/v1/time-deposits
-curl -X POST -H "Idempotency-Key: $(uuidgen)" http://localhost:8080/api/v1/balance-updates
+curl -X POST http://localhost:8080/api/v1/balance-updates
 ```
-A new key per call applies interest again; reusing a key returns the first outcome. The header is optional.
+The first `POST` of a calendar month (UTC) applies the interest; further calls in that month return the same
+outcome. To see interest applied again locally, reset the stack (`docker compose down -v`) or wait for the next
+month.
 
 ### Stop and reset
 - `docker compose down` stops the stack; the database volume and its balances are kept.
