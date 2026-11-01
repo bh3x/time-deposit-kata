@@ -1,47 +1,38 @@
 package org.ikigaidigital.configuration;
 
-import org.ikigaidigital.timedeposit.application.port.in.ListTimeDepositsUseCase;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.ValueSource;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
-import org.springframework.context.annotation.Import;
-import org.springframework.http.HttpStatus;
-import org.springframework.test.context.bean.override.mockito.MockitoBean;
-import org.springframework.test.web.servlet.assertj.MockMvcTester;
+
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.springframework.http.HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN;
-import static org.springframework.http.HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD;
-import static org.springframework.http.HttpHeaders.ORIGIN;
+import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
 
-/** A configured {@code app.cors.allowed-origins} list replaces the default (ADR-0010). */
-@WebMvcTest(properties = "app.cors.allowed-origins=http://a.test,http://b.test")
-@Import(ApiCorsConfiguration.class)
+/** Misconfigured origins fail at startup rather than opening or silently closing the API (ADR-0010). */
 class ApiCorsPropertiesTest {
 
-    @Autowired
-    private MockMvcTester mvc;
-
-    @MockitoBean
-    private ListTimeDepositsUseCase listTimeDeposits;
-
-    @ParameterizedTest(name = "allows configured origin {0}")
-    @ValueSource(strings = {"http://a.test", "http://b.test"})
-    void allowsEveryConfiguredOrigin(String origin) {
-        assertThat(mvc.options().uri("/api/v1/balance-updates")
-                .header(ORIGIN, origin)
-                .header(ACCESS_CONTROL_REQUEST_METHOD, "POST"))
-                .hasStatusOk()
-                .hasHeader(ACCESS_CONTROL_ALLOW_ORIGIN, origin);
+    @Test
+    void rejectsAWildcardOrigin() {
+        assertThatIllegalArgumentException()
+                .isThrownBy(() -> new ApiCorsProperties(List.of("http://localhost:8081", "*")));
     }
 
     @Test
-    void replacesTheDefaultOrigin() {
-        assertThat(mvc.options().uri("/api/v1/balance-updates")
-                .header(ORIGIN, "http://localhost:8081")
-                .header(ACCESS_CONTROL_REQUEST_METHOD, "POST"))
-                .hasStatus(HttpStatus.FORBIDDEN);
+    void rejectsAMissingOrEmptyList() {
+        assertThatIllegalArgumentException().isThrownBy(() -> new ApiCorsProperties(null));
+        assertThatIllegalArgumentException().isThrownBy(() -> new ApiCorsProperties(List.of()));
+    }
+
+    // A trailing comma in APP_CORS_ALLOWEDORIGINS binds an empty entry, which would silently allow nothing.
+    @Test
+    void rejectsABlankOrigin() {
+        assertThatIllegalArgumentException()
+                .isThrownBy(() -> new ApiCorsProperties(List.of("http://localhost:8081", "")));
+        assertThatIllegalArgumentException().isThrownBy(() -> new ApiCorsProperties(List.of(" ")));
+    }
+
+    @Test
+    void keepsTheConfiguredOrigins() {
+        assertThat(new ApiCorsProperties(List.of("http://a.test", "http://b.test")).allowedOrigins())
+                .containsExactly("http://a.test", "http://b.test");
     }
 }

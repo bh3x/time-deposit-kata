@@ -44,7 +44,7 @@ Constraints: a reviewer may have Docker but no JDK 25; the application maps no r
   server) and keeps `/api/v1` for same-origin clients. The generated base path stays `/api/v1`.
 - **CORS: one global mapping** for `/api/**` in the `configuration` package (ADR-0008: `@Configuration` classes).
   - Allowed origins: property `app.cors.allowed-origins` (a list), default `http://localhost:8081`; a configured
-    list replaces the default. No wildcard.
+    list replaces the default. A wildcard, an empty list or a blank entry fails at startup.
   - Allowed methods `GET`, `HEAD`, `POST`; allowed request headers `Idempotency-Key` and `Content-Type`; no exposed
     headers; no credentials (the contract has `security: []`); Spring's default max-age.
   - A request from another origin is rejected by Spring with `403` and a plain-text body. Assumption: like the

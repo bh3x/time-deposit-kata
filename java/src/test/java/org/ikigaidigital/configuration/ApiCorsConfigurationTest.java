@@ -127,6 +127,7 @@ class ApiCorsConfigurationTest {
             assertThat(mvc.options().uri(TIME_DEPOSITS)
                     .header(ORIGIN, SWAGGER_UI)
                     .header(ACCESS_CONTROL_REQUEST_METHOD, "DELETE"))
+                    .hasStatus(HttpStatus.FORBIDDEN)
                     .doesNotContainHeader(ACCESS_CONTROL_ALLOW_ORIGIN);
         }
     }
