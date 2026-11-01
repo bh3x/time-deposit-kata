@@ -1,6 +1,6 @@
 # ADR-0009: Testing strategy
 
-- **Status:** Accepted
+- **Status:** Accepted; partly superseded by [ADR-0015](0015-testing-strategy-as-built.md)
 - **Date:** 2026-10-31
 
 ## Context

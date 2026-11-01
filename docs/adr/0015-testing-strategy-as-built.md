@@ -1,6 +1,6 @@
 # ADR-0015: Testing strategy as built
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-11-01
 
 ## Context
