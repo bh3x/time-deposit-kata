@@ -25,10 +25,11 @@ dependencies {
     implementation(libs.spring.boot.starter.flyway)
     implementation(libs.flyway.database.postgresql)
     runtimeOnly(libs.postgresql)
-    // REST adapter (ADR-0002): Spring MVC for the generated interface, Bean Validation for its constraints
-    // (e.g. the Idempotency-Key length).
+    // REST adapter (ADR-0002): Spring MVC for the generated interface. No validator: since ADR-0013 the contract has
+    // no request parameter to validate. Only the Bean Validation API, because openapi-generator puts @NotNull on the
+    // required model fields even with useBeanValidation=false; nothing evaluates it.
     implementation(libs.spring.boot.starter.webmvc)
-    implementation(libs.spring.boot.starter.validation)
+    implementation(libs.jakarta.validation.api)
 }
 
 // Contract first (ADR-0002, ADR-0008 rule 6): the API interface and models are generated from openapi.yaml on every
@@ -54,7 +55,8 @@ openApiGenerate {
         "useJackson3" to "true",
         // One interface per tag, i.e. per capability (ADR-0008 rule 6).
         "useTags" to "true",
-        "useBeanValidation" to "true",
+        // No request parameters to validate since ADR-0013 (see the dependencies above).
+        "useBeanValidation" to "false",
         // JSpecify, as Spring Framework 7 uses: its org.springframework.lang.Nullable is deprecated (-Werror).
         "useJspecify" to "true",
         // The base path comes from the contract's server URL (/api/v1), not from the controller.
