@@ -47,6 +47,23 @@ class TimeDepositCalculatorTest {
         assertThat(deposit.getBalance()).isEqualTo(expected);
     }
 
+    // Open bounds are OptionalInt.empty(), not sentinels (ADR-0011, B): at the extremes of int the defaults must still
+    // match the legacy code. The randomized comparison does not draw these days, and it stays unchanged (ADR-0011).
+    @ParameterizedTest(name = "{0} at {1} days matches the frozen legacy copy")
+    @CsvSource({
+            "basic, -2147483648", "basic, 2147483647",
+            "student, -2147483648", "student, 2147483647",
+            "premium, -2147483648", "premium, 2147483647"})
+    void matchesTheFrozenLegacyCopyAtTheExtremesOfDays(String planType, int days) {
+        TimeDeposit actual = new TimeDeposit(1, planType, 1200.00, days);
+        TimeDeposit expected = new TimeDeposit(1, planType, 1200.00, days);
+
+        new TimeDepositCalculator().updateBalance(List.of(actual));
+        new FrozenLegacyTimeDepositCalculator().updateBalance(List.of(expected));
+
+        assertThat(actual.getBalance()).isEqualTo(expected.getBalance());
+    }
+
     @Test
     void rejectsMissingPolicies() {
         assertThatNullPointerException().isThrownBy(() -> new TimeDepositCalculator(null));

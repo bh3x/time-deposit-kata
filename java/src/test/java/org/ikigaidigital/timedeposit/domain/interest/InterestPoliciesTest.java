@@ -38,11 +38,6 @@ class InterestPoliciesTest {
                 .isEqualTo(new RateWindowPolicy(0.05, 30, OptionalInt.of(45), OptionalInt.empty()));
     }
 
-    @Test
-    void theDefaultGracePeriodIsThirtyDays() {
-        assertThat(InterestPolicies.DEFAULT_GRACE_PERIOD_DAYS).isEqualTo(30);
-    }
-
     // Matching is exact and case-sensitive (CLAUDE.md hard constraints).
     @ParameterizedTest(name = "\"{0}\" gets no interest")
     @ValueSource(strings = {"gold", "Basic", "STUDENT", " basic", "basic ", ""})
