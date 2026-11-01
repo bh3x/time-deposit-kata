@@ -88,7 +88,7 @@ class ApiCorsConfigurationTest {
 
         // A preflight is answered by the framework (ADR-0005) and never runs the operation.
         @Test
-        void preflightDoesNotInvokeTheOperation() {
+        void preflightDoesNotInvokeEitherOperation() {
             assertThat(mvc.options().uri(TIME_DEPOSITS)
                     .header(ORIGIN, SWAGGER_UI)
                     .header(ACCESS_CONTROL_REQUEST_METHOD, "GET"))
@@ -98,7 +98,7 @@ class ApiCorsConfigurationTest {
                     .header(ACCESS_CONTROL_REQUEST_METHOD, "POST"))
                     .hasStatusOk();
 
-            verifyNoInteractions(listTimeDeposits);
+            verifyNoInteractions(listTimeDeposits, applyMonthlyInterest);
         }
 
         // Origins match exactly: scheme, host and port.
@@ -187,6 +187,17 @@ class ApiCorsConfigurationTest {
                     .doesNotContainHeader(ACCESS_CONTROL_ALLOW_ORIGIN);
 
             verifyNoInteractions(listTimeDeposits);
+        }
+
+        // A POST without a body is a browser "simple request": it is sent without a preflight, so the rejection of
+        // the actual request is what keeps a page from another origin from applying the month's interest.
+        @Test
+        void rejectsPostFromAnotherOriginWithoutRunningIt() {
+            assertThat(mvc.post().uri(BALANCE_UPDATES).header(ORIGIN, "http://localhost:8082"))
+                    .hasStatus(HttpStatus.FORBIDDEN)
+                    .doesNotContainHeader(ACCESS_CONTROL_ALLOW_ORIGIN);
+
+            verifyNoInteractions(applyMonthlyInterest);
         }
     }
 
