@@ -1,6 +1,7 @@
 package org.ikigaidigital.timedeposit.adapter.out.persistence;
 
 import jakarta.persistence.EntityManager;
+import org.ikigaidigital.TimeDeposit;
 import jakarta.persistence.EntityManagerFactory;
 import org.hibernate.SessionFactory;
 import org.hibernate.stat.Statistics;
@@ -21,12 +22,14 @@ import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.simple.JdbcClient;
 
 import javax.sql.DataSource;
+import java.sql.SQLException;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatIllegalStateException;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
@@ -236,6 +239,97 @@ class TimeDepositPersistenceAdapterTest {
 
         assertThat(entity.getWithdrawals()).extracting(WithdrawalEntity::getPublicId)
                 .containsExactly(uuid("000000000903"), uuid("000000000904"), uuid("000000000902"));
+    }
+
+    @Nested
+    @DisplayName("balance update: locking load and cent-precise write (P4, S5, ADR-0012)")
+    class BalanceUpdates {
+
+        // Updating the first row moves it to the end of the heap, so without ORDER BY it would come back last; the
+        // order matters because every run must lock the rows in the same order (ADR-0012, A).
+        @Test
+        void loadsEveryDepositOrderedByInternalKey() {
+            int first = rows.insertDeposit("premium", 46, "20.00");
+            int second = rows.insertDeposit("basic", 31, "10.00");
+            jdbc.sql("update \"timeDeposits\" set \"balance\" = 21.00 where \"id\" = ?").param(first).update();
+
+            List<TimeDeposit> deposits = adapter.loadAllForUpdate();
+
+            assertThat(deposits).extracting(TimeDeposit::getId).containsExactly(first, second);
+            assertThat(deposits.getFirst()).satisfies(d -> {
+                assertThat(d.getPlanType()).isEqualTo("premium");
+                assertThat(d.getDays()).isEqualTo(46);
+                assertThat(d.getBalance()).isEqualTo(21.00);
+            });
+        }
+
+        // S5, write half: the double sum keeps binary noise (known issue #2), above the cent (1000.9300000000001) or
+        // below it (0.7999999999999999); the column stores the exact cent sum either way.
+        @ParameterizedTest(name = "{0} + {1} stored as {2}")
+        @CsvSource({"1000.10, 0.83, 1000.93", "0.70, 0.10, 0.80"})
+        void writesBalancesAtCentPrecision(String balance, double interest, String stored) {
+            int id = rows.insertDeposit("basic", 31, balance);
+            TimeDeposit deposit = adapter.loadAllForUpdate().getFirst();
+            deposit.setBalance(deposit.getBalance() + interest);
+
+            adapter.saveBalances(List.of(deposit));
+
+            assertThat(storedBalance(id)).isEqualTo(stored);
+            assertThat(adapter.loadAllForUpdate().getFirst().getBalance()).isEqualTo(Double.parseDouble(stored));
+        }
+
+        // P4: a balance update writes nothing but the balance.
+        @Test
+        void keepsEverythingButTheBalance() {
+            int id = rows.insertDeposit(uuid("000000000001"), "Basic", 31, "10.00");
+            rows.insertWithdrawal(uuid("000000000901"), id, "1.00", "2026-01-01");
+            TimeDeposit deposit = adapter.loadAllForUpdate().getFirst();
+            deposit.setBalance(11.00);
+
+            adapter.saveBalances(List.of(deposit));
+
+            assertThat(jdbc.sql("""
+                    select "publicId"::text || '|' || "planType" || '|' || "days" || '|' || "balance"
+                    from "timeDeposits" where "id" = ?""").param(id).query(String.class).single())
+                    .isEqualTo(uuid("000000000001") + "|Basic|31|11.00");
+            assertThat(jdbc.sql("select count(*) from \"withdrawals\" where \"timeDepositId\" = ? and \"amount\" = 1.00")
+                    .param(id).query(Integer.class).single()).isEqualTo(1);
+        }
+
+        @Test
+        void acceptsTheColumnMaximum() {
+            int id = rows.insertDeposit("basic", 31, "1.00");
+            TimeDeposit deposit = adapter.loadAllForUpdate().getFirst();
+            deposit.setBalance(9_999_999_999_999.99);
+
+            adapter.saveBalances(List.of(deposit));
+
+            assertThat(storedBalance(id)).isEqualTo("9999999999999.99");
+        }
+
+        // ADR-0012, E: the column is the guard for balances of 10^13 or more; the failure aborts the run.
+        @Test
+        void rejectsABalanceAboveTheColumnMaximum() {
+            rows.insertDeposit("basic", 31, "1.00");
+            TimeDeposit deposit = adapter.loadAllForUpdate().getFirst();
+            deposit.setBalance(10_000_000_000_000.00);
+
+            assertThatThrownBy(() -> adapter.saveBalances(List.of(deposit)))
+                    .rootCause().isInstanceOf(SQLException.class)
+                    .extracting(cause -> ((SQLException) cause).getSQLState()).isEqualTo("22003");
+        }
+
+        @Test
+        void failsForADepositThatIsNotStored() {
+            TimeDeposit unknown = new TimeDeposit(Integer.MAX_VALUE, "basic", 1.00, 31);
+
+            assertThatIllegalStateException().isThrownBy(() -> adapter.saveBalances(List.of(unknown)));
+        }
+
+        private String storedBalance(int id) {
+            return jdbc.sql("select \"balance\"::text from \"timeDeposits\" where \"id\" = ?").param(id)
+                    .query(String.class).single();
+        }
     }
 
     // The port promises a consistent snapshot; this adapter delivers it by reading everything in one statement.
