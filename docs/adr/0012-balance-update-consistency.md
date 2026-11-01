@@ -224,18 +224,18 @@ With a key:
 3. **`apply(reservation)`** (one transaction): lock the key row and apply the fence (C); then steps 1–3 above,
    flushing the balances; then, as the last statement, switch the key to `COMPLETED` with `processedCount`,
    `executedAt` and `completedAt` (exactly one row). Commit.
-4. **On any failure in step 3 after the fence let the run start:** the transaction rolls back;
+4. **On any exception from step 3:** the transaction rolls back;
    `release(reservation)` deletes the row (`WHERE "createdAt" = <token> AND "status" = 'IN_PROGRESS'`) in its own
-   transaction; the original error
-   propagates (`500`), with a failure of the release added to it as suppressed. If the process dies before the
-   release, the row is taken over once stale (C) or purged after 24 hours (D). A fence outcome (`409` or replay) is
-   not a failure and releases nothing: the row then belongs to a successor or is completed, and a release could
-   only wait for the successor's run.
+   transaction; the original error propagates (`500`), with a failure of the release added to it as suppressed. If the process dies before the
+   release, the row is taken over once stale (C) or purged after 24 hours (D). Releasing is safe on any exception,
+   also one before the fence decided (e.g. a database error while locking the key row): the token filter matches
+   only this request's own `IN_PROGRESS` row, never a successor's or a completed one. A fence outcome (`409` or
+   replay) is a result, not an exception, and releases nothing.
 
 Lock order is the same everywhere: key row (if any), then deposits by id. A reservation takes no deposit locks and
-skips locked key rows; it waits only for the commit of another reservation or purge transaction (short transactions
-that never wait for a run; a purge never waits at all, and each reservation inserts a single key), or for the commit
-of a run that has already switched its key to `COMPLETED`. No wait cycle can form, and a long run cannot stall a
+skips locked key rows; it waits only for the commit of another reservation, purge or release transaction (short
+transactions that never wait for a run; a purge never waits at all, and each reservation inserts a single key), or
+for the commit of a run that has already switched its key to `COMPLETED`. No wait cycle can form, and a long run cannot stall a
 reservation. The key check happens before the deposit lock, so a
 duplicate request gets `409` instead of waiting behind the run it duplicates. That an `ON CONFLICT DO NOTHING`
 insert does not wait for a row that is only *locked* (not updated) by a running run is **unverified** (the
