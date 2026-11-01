@@ -69,8 +69,8 @@ openApiGenerate {
     )
 }
 
-// Derived from the task, so every consumer of the main sources (compilation, IDE import, sources jar) runs the
-// generator first without an explicit dependsOn.
+// Derived from the task, so every task that consumes the main sources (e.g. compileJava) depends on the generator
+// without an explicit dependsOn.
 sourceSets {
     main {
         java.srcDir(tasks.named("openApiGenerate").map { generatedOpenApiDir.get().dir("src/main/java") })
