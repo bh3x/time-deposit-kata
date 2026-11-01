@@ -46,8 +46,8 @@ when a gap is found; never weaken, skip or delete them, and never edit the froze
 production code changed behaviour.
 
 ## Acceptance scenarios
-A step is done when all scenarios it touches pass at the stated level. Scenarios marked *pending* are completed — and
-their level possibly adjusted — by the planned *Balance update consistency* ADR.
+A step is done when all scenarios it touches pass at the stated level. The balance update scenarios P9–P14, S6 and S8
+follow [ADR-0012](adr/0012-balance-update-consistency.md) (*Balance update consistency*).
 
 ### `GET /api/v1/time-deposits`
 | # | Scenario | Level |
@@ -71,10 +71,12 @@ their level possibly adjusted — by the planned *Balance update consistency* AD
 | P6 | A repeated `Idempotency-Key` returns the original outcome without applying interest again: the same `processedCount` and the identical `executedAt` (stored truncated to microseconds, ADR-0006); the response is re-rendered from the stored outcome | application (no second run) + persistence (outcome round trip) + web slice (same body) |
 | P7 | Key length 1 and 255 accepted; empty and 256 characters → `400` Problem Details; a missing header is valid (P3); a whitespace-only key is valid, since the contract defines length only | web slice |
 | P8 | A 255-character key is stored and replayed | persistence |
-| P9 | A key still in progress → `409`; a failed request stores nothing, so a retry runs (*pending*) | application |
-| P10 | Two parallel runs apply interest twice; nothing is lost (*pending*) | end-to-end |
-| P11 | One deposit exceeding the column maximum aborts the whole run (*pending*) | end-to-end |
-| P12 | Keys expire 24 hours after completion; a stale in-progress key is taken over (*pending*) | application |
+| P9 | In progress → `409` without waiting: an unlocked `IN_PROGRESS` key with `createdAt` = now − 10 min + 1 µs, and a key whose row is locked by a running run; a failed run rolls back and releases its reservation, so a retry with the same key runs (ADR-0012) | application (fixed clock, fakes) + persistence (`SKIP LOCKED`, release) |
+| P10 | Two runs that overlap apply interest twice, nothing lost: the test holds the deposit rows locked in its own JDBC transaction, starts the runs, waits until they block (`pg_locks`, no `Thread.sleep`), then releases; also one keyed and one unkeyed run (ADR-0012) | end-to-end |
+| P11 | One deposit whose new balance exceeds `NUMERIC(15,2)` aborts the whole run: no balance changes, the reservation is released; the `500` Problem Details is checked as wiring only (its body is R5's) (ADR-0012) | end-to-end |
+| P12 | Purge and takeover at the exact boundaries, with a fixed clock: a `COMPLETED` key with `completedAt` = now − 24 h is purged and the key runs again, at now − 24 h + 1 µs it replays; an unlocked `IN_PROGRESS` key with `createdAt` = now − 10 min is taken over and runs; an unlocked `IN_PROGRESS` key whose key never returns is purged by another key's request at `createdAt` = now − 24 h and kept at now − 24 h + 1 µs; a locked row is never purged; the purge commits before the reservation (ADR-0012) | application (fixed clock, fakes) + persistence |
+| P13 | Fence, in order: a missing key row → `409`, a `COMPLETED` row → replay, a foreign token → `409`, each without changing a balance; the own token runs; the switch to `COMPLETED` that matches no row fails the run (ADR-0012) | persistence (fence queries) + application (branching, fakes) |
+| P14 | A duplicate does not wait for a running run: the test holds the deposit rows locked; request A reserves, locks its key row and blocks on the deposits (`pg_locks`); request B with the same key gets `409` without blocking; the test releases the locks, A completes, and B's retry gets the replayed outcome; interest is applied once (ADR-0012) | end-to-end |
 
 ### Persistence (ADR-0006)
 | # | Scenario | Level |
@@ -84,8 +86,9 @@ their level possibly adjusted — by the planned *Balance update consistency* AD
 | S3 | Deleting a deposit that has withdrawals is rejected (`ON DELETE RESTRICT`) | persistence |
 | S4 | `publicId` is generated (random UUID) when omitted | persistence |
 | S5 | Balances are written at cent precision: the double `1000.9300000000001` is stored as `1000.93` and read back as `1000.93` | persistence |
-| S6 | The idempotency outcome and the balances commit or roll back together (*pending*) | end-to-end |
+| S6 | The idempotency outcome and the balances commit or roll back together (ADR-0012) | end-to-end |
 | S7 | The demo seed is loaded only with the `demo` profile and covers the cases listed in ADR-0006 | persistence |
+| S8 | `NaN` balances and amounts are rejected by the schema; ±Infinity already is (ADR-0012, known issue #8) | persistence |
 
 ### Both endpoints
 | # | Scenario | Level |
