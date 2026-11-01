@@ -37,7 +37,7 @@ interface TimeDepositJpaRepository extends Repository<TimeDepositEntity, Integer
 
     /**
      * Writes one balance and nothing else; returns the number of rows changed. An explicit statement rather than
-     * dirty checking, so it is executed when called — before the idempotency key's switch to completed (ADR-0012) —
+     * dirty checking, so it is executed when called — before the month's switch to completed (ADR-0012, ADR-0013) —
      * and the row count shows a missing deposit. The persistence context is cleared afterwards, so a later read does
      * not return the stale entity.
      */

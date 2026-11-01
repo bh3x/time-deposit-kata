@@ -20,11 +20,11 @@ import org.springframework.test.web.servlet.client.RestTestClient;
 
 import javax.sql.DataSource;
 import java.sql.Connection;
-import java.sql.SQLException;
 import java.sql.Statement;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
@@ -32,33 +32,63 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.LockSupport;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * {@code POST /api/v1/balance-updates} end to end (docs/testing.md P1, P10, P11, P14, S6): HTTP, controller, use case,
- * persistence and PostgreSQL, with real commits and a fixed clock. Overlaps are forced, not hoped for: the test holds
- * the deposit rows locked in its own JDBC transaction, starts the requests, waits until PostgreSQL reports them
- * waiting for a lock (pg_locks, polled with a deadline — no fixed sleep), then releases. The interest rules themselves
- * are pinned at the calculator; one sample travels the whole way.
+ * {@code POST /api/v1/balance-updates} end to end (docs/testing.md P1, P6, P10, P11, P14, S6): HTTP, controller, use
+ * case, persistence and PostgreSQL, with real commits and a test clock the tests can move. Overlaps are forced, not
+ * hoped for: the test holds the deposit rows locked in its own JDBC transaction, starts the requests, waits until
+ * PostgreSQL reports them waiting for a lock (pg_locks, polled with a deadline — no fixed sleep), then releases. The
+ * month rules themselves (boundaries, missed months, takeover) are owned by the application tests.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @AutoConfigureRestTestClient
-@Import({PostgresContainerConfiguration.class, ApplyMonthlyInterestEndToEndTest.FixedClock.class})
+@Import({PostgresContainerConfiguration.class, ApplyMonthlyInterestEndToEndTest.TestClock.class})
 class ApplyMonthlyInterestEndToEndTest {
 
     private static final String BALANCE_UPDATES = "/api/v1/balance-updates";
     private static final Instant NOW = Instant.parse("2026-11-01T10:15:30.123456Z");
     private static final Duration DEADLINE = Duration.ofSeconds(10);
 
+    /** A clock the tests set; thread-safe, because requests read it on server threads. */
+    static final class SettableClock extends Clock {
+
+        private final AtomicReference<Instant> now;
+
+        SettableClock(AtomicReference<Instant> now) {
+            this.now = now;
+        }
+
+        void set(Instant instant) {
+            now.set(instant);
+        }
+
+        @Override
+        public ZoneId getZone() {
+            return ZoneOffset.UTC;
+        }
+
+        @Override
+        public Clock withZone(ZoneId zone) {
+            return this;
+        }
+
+        @Override
+        public Instant instant() {
+            return now.get();
+        }
+    }
+
     @TestConfiguration(proxyBeanMethods = false)
-    static class FixedClock {
+    static class TestClock {
 
         @Bean
         @Primary
-        Clock fixedClock() {
-            return Clock.fixed(NOW, ZoneOffset.UTC);
+        SettableClock settableClock() {
+            return new SettableClock(new AtomicReference<>(NOW));
         }
     }
 
@@ -68,14 +98,18 @@ class ApplyMonthlyInterestEndToEndTest {
     @Autowired
     private DataSource dataSource;
 
+    @Autowired
+    private SettableClock clock;
+
     private JdbcClient jdbc;
     private TimeDepositRows rows;
     private final ExecutorService requests = Executors.newFixedThreadPool(2);
 
     @BeforeEach
-    void truncateTables() {
+    void startFromAnEmptyMonth() {
+        clock.set(NOW);
         jdbc = JdbcClient.create(dataSource);
-        jdbc.sql("truncate \"withdrawals\", \"timeDeposits\", \"idempotencyKeys\" restart identity").update();
+        jdbc.sql("truncate \"withdrawals\", \"timeDeposits\", \"balanceUpdatePeriods\" restart identity").update();
         rows = new TimeDepositRows(jdbc);
     }
 
@@ -84,21 +118,23 @@ class ApplyMonthlyInterestEndToEndTest {
         requests.shutdownNow();
     }
 
-    private EntityExchangeResult<String> post(String idempotencyKey) {
-        RestTestClient.RequestBodySpec request = client.post().uri(BALANCE_UPDATES);
-        if (idempotencyKey != null) {
-            request.header("Idempotency-Key", idempotencyKey);
-        }
-        return request.exchange().expectBody(String.class).returnResult();
+    private EntityExchangeResult<String> post() {
+        return client.post().uri(BALANCE_UPDATES).exchange().expectBody(String.class).returnResult();
     }
 
-    private CompletableFuture<EntityExchangeResult<String>> postAsync(String idempotencyKey) {
-        return CompletableFuture.supplyAsync(() -> post(idempotencyKey), requests);
+    private CompletableFuture<EntityExchangeResult<String>> postAsync() {
+        return CompletableFuture.supplyAsync(this::post, requests);
     }
 
     private String balanceOf(int id) {
         return jdbc.sql("select \"balance\"::text from \"timeDeposits\" where \"id\" = ?").param(id)
                 .query(String.class).single();
+    }
+
+    private List<String> completedPeriods() {
+        return jdbc.sql("""
+                select "period"::text from "balanceUpdatePeriods" where "status" = 'COMPLETED' order by "period"
+                """).query(String.class).list();
     }
 
     // Holds all deposit rows locked on a separate connection while the action runs, then releases them.
@@ -127,6 +163,11 @@ class ApplyMonthlyInterestEndToEndTest {
         return jdbc.sql("select count(distinct pid) from pg_locks where not granted").query(Integer.class).single();
     }
 
+    private static EntityExchangeResult<String> await(CompletableFuture<EntityExchangeResult<String>> future)
+            throws Exception {
+        return future.get(DEADLINE.toSeconds(), TimeUnit.SECONDS);
+    }
+
     @FunctionalInterface
     private interface ThrowingRunnable {
         void run() throws Exception;
@@ -147,79 +188,98 @@ class ApplyMonthlyInterestEndToEndTest {
 
         assertThat(balanceOf(earning)).isEqualTo("1000.83");
         assertThat(balanceOf(unchanged)).isEqualTo("1000.00");
+        assertThat(completedPeriods()).containsExactly("2026-11-01");
     }
 
-    // P10: two runs that overlap are serialised by the row locks; both months of interest are kept.
+    // P3, P6: a later request in the same month returns the month's outcome unchanged and applies nothing.
     @Test
-    void overlappingRunsKeepBothMonthsOfInterest() throws Exception {
+    void replaysTheMonthWithTheSameBody() {
+        int id = rows.insertDeposit("basic", 31, "1000.00");
+        EntityExchangeResult<String> first = post();
+        clock.set(NOW.plus(Duration.ofHours(1)));
+
+        EntityExchangeResult<String> second = post();
+
+        assertThat(second.getStatus()).isEqualTo(HttpStatus.OK);
+        assertThat(second.getResponseBody()).isEqualTo(first.getResponseBody());
+        assertThat(balanceOf(id)).isEqualTo("1000.83");
+    }
+
+    // P10: two requests of one month that overlap apply it once; the other gets 409 or the month's outcome.
+    @Test
+    void overlappingRequestsOfOneMonthApplyItOnce() throws Exception {
         int id = rows.insertDeposit("basic", 31, "1000.00");
         List<CompletableFuture<EntityExchangeResult<String>>> runs = new ArrayList<>();
 
         whileDepositsAreLocked(() -> {
-            runs.add(postAsync(null));
-            runs.add(postAsync(null));
-            awaitSessionsWaitingForALock(2);
+            runs.add(postAsync());
+            awaitSessionsWaitingForALock(1);
+            runs.add(postAsync());
+            assertThat(await(runs.get(1)).getStatus()).isEqualTo(HttpStatus.CONFLICT);
         });
 
-        assertThat(runs.get(0).get(DEADLINE.toSeconds(), TimeUnit.SECONDS).getStatus()).isEqualTo(HttpStatus.OK);
-        assertThat(runs.get(1).get(DEADLINE.toSeconds(), TimeUnit.SECONDS).getStatus()).isEqualTo(HttpStatus.OK);
-        assertThat(balanceOf(id)).isEqualTo("1001.66");
+        assertThat(await(runs.get(0)).getStatus()).isEqualTo(HttpStatus.OK);
+        assertThat(balanceOf(id)).isEqualTo("1000.83");
+        assertThat(completedPeriods()).containsExactly("2026-11-01");
     }
 
-    // P10: a keyed and an unkeyed run serialise the same way.
+    // P10: requests of two months that overlap (the clock crosses midnight between them) both wait on the deposit
+    // locks and both apply their month; nothing is lost (ADR-0012, A; ADR-0013).
     @Test
-    void overlappingKeyedAndUnkeyedRunsKeepBothMonthsOfInterest() throws Exception {
+    void overlappingRequestsOfTwoMonthsBothApply() throws Exception {
         int id = rows.insertDeposit("basic", 31, "1000.00");
+        clock.set(Instant.parse("2026-10-31T23:59:59.999999Z"));
         List<CompletableFuture<EntityExchangeResult<String>>> runs = new ArrayList<>();
 
         whileDepositsAreLocked(() -> {
-            runs.add(postAsync("k"));
-            runs.add(postAsync(null));
+            runs.add(postAsync());
+            awaitSessionsWaitingForALock(1);
+            clock.set(Instant.parse("2026-11-01T00:00:00Z"));
+            runs.add(postAsync());
             awaitSessionsWaitingForALock(2);
         });
 
-        assertThat(runs.get(0).get(DEADLINE.toSeconds(), TimeUnit.SECONDS).getStatus()).isEqualTo(HttpStatus.OK);
-        assertThat(runs.get(1).get(DEADLINE.toSeconds(), TimeUnit.SECONDS).getStatus()).isEqualTo(HttpStatus.OK);
+        assertThat(await(runs.get(0)).getStatus()).isEqualTo(HttpStatus.OK);
+        assertThat(await(runs.get(1)).getStatus()).isEqualTo(HttpStatus.OK);
         assertThat(balanceOf(id)).isEqualTo("1001.66");
-        assertThat(jdbc.sql("select \"status\" from \"idempotencyKeys\" where \"idempotencyKey\" = 'k'")
-                .query(String.class).single()).isEqualTo("COMPLETED");
+        assertThat(completedPeriods()).containsExactly("2026-10-01", "2026-11-01");
     }
 
-    // P11, S6: a balance the column cannot hold aborts the whole run: no balance changes, no key is kept, and a retry
-    // with the same key runs again (and fails again) instead of getting 409.
+    // P11, S6: a balance the column cannot hold aborts the whole run: no balance changes, the month is released, and
+    // a retry runs (and fails) again instead of replaying or getting 409.
     @Test
     void abortsTheWholeRunWhenOneBalanceExceedsTheColumn() {
         int small = rows.insertDeposit("basic", 31, "1000.00");
         rows.insertDeposit("basic", 31, "9999999999999.99");
 
         for (int attempt = 1; attempt <= 2; attempt++) {
-            EntityExchangeResult<String> result = post("k");
+            EntityExchangeResult<String> result = post();
             assertThat(result.getStatus()).isEqualTo(HttpStatus.INTERNAL_SERVER_ERROR);
             assertThat(result.getResponseHeaders().getContentType()).isEqualTo(MediaType.APPLICATION_PROBLEM_JSON);
         }
 
         assertThat(balanceOf(small)).isEqualTo("1000.00");
-        assertThat(jdbc.sql("select count(*) from \"idempotencyKeys\"").query(Integer.class).single()).isZero();
+        assertThat(jdbc.sql("select count(*) from \"balanceUpdatePeriods\"").query(Integer.class).single()).isZero();
     }
 
-    // P14: while a keyed run waits for the deposits, a duplicate gets 409 at once instead of waiting behind it; its
-    // retry after the run replays the outcome, and interest is applied once.
+    // P14: while the month's run waits for the deposits, a duplicate gets 409 at once instead of waiting behind it;
+    // its retry after the run replays the outcome, and interest is applied once.
     @Test
     void aDuplicateGetsConflictWithoutWaitingAndThenTheReplay() throws Exception {
         int id = rows.insertDeposit("basic", 31, "1000.00");
         List<CompletableFuture<EntityExchangeResult<String>>> original = new ArrayList<>();
 
         whileDepositsAreLocked(() -> {
-            original.add(postAsync("k"));
+            original.add(postAsync());
             awaitSessionsWaitingForALock(1);
-            EntityExchangeResult<String> duplicate = postAsync("k").get(DEADLINE.toSeconds(), TimeUnit.SECONDS);
+            EntityExchangeResult<String> duplicate = await(postAsync());
             assertThat(duplicate.getStatus()).isEqualTo(HttpStatus.CONFLICT);
             assertThat(duplicate.getResponseHeaders().getContentType()).isEqualTo(MediaType.APPLICATION_PROBLEM_JSON);
         });
 
-        EntityExchangeResult<String> applied = original.getFirst().get(DEADLINE.toSeconds(), TimeUnit.SECONDS);
+        EntityExchangeResult<String> applied = await(original.getFirst());
         assertThat(applied.getStatus()).isEqualTo(HttpStatus.OK);
-        EntityExchangeResult<String> replayed = post("k");
+        EntityExchangeResult<String> replayed = post();
         assertThat(replayed.getStatus()).isEqualTo(HttpStatus.OK);
         assertThat(replayed.getResponseBody()).isEqualTo(applied.getResponseBody());
         assertThat(balanceOf(id)).isEqualTo("1000.83");

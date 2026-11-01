@@ -2,9 +2,15 @@ package org.ikigaidigital.timedeposit.adapter.out.persistence;
 
 import org.ikigaidigital.testcontainers.PostgresContainerConfiguration;
 import org.ikigaidigital.timedeposit.TimeDepositRows;
+import org.ikigaidigital.timedeposit.application.model.BalanceUpdateOutcome;
+import org.ikigaidigital.timedeposit.application.model.BalanceUpdatePeriodState;
+import org.ikigaidigital.timedeposit.application.model.BalanceUpdatePeriodState.Completed;
+import org.ikigaidigital.timedeposit.application.model.BalanceUpdatePeriodState.InProgress;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.context.annotation.Import;
@@ -19,6 +25,8 @@ import java.sql.Connection;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.time.Instant;
+import java.time.OffsetDateTime;
+import java.time.YearMonth;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.function.Supplier;
@@ -28,24 +36,30 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * The locks ADR-0012 relies on, across two connections: a holder connection takes a lock and keeps it while the
- * adapter runs in its own transaction (scenarios P9, P12 and the two items ADR-0012 marks unverified). A missing
+ * adapter runs in its own transaction (scenarios P9, P15, P16 and the two items ADR-0012 marks unverified). A missing
  * SKIP LOCKED or an unexpected wait fails fast with lock_timeout (55P03) instead of hanging; no Thread.sleep.
  * Data is committed, so each test cleans up after itself.
  */
 @DataJpaTest
 @Import({PostgresContainerConfiguration.class, TimeDepositPersistenceAdapter.class,
-        IdempotencyKeyPersistenceAdapter.class})
+        BalanceUpdatePeriodPersistenceAdapter.class})
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
 class BalanceUpdateLockingTest {
 
     private static final String LOCK_NOT_AVAILABLE = "55P03";
     private static final Instant NOW = Instant.parse("2026-11-01T10:15:30.123456Z");
+    private static final YearMonth NOVEMBER = YearMonth.of(2026, 11);
+    private static final YearMonth OCTOBER = YearMonth.of(2026, 10);
+    private static final BalanceUpdateOutcome OUTCOME =
+            new BalanceUpdateOutcome(3, Instant.parse("2026-11-01T08:00:00.654321Z"));
+    private static final String LOCK_NOVEMBER =
+            "select 1 from \"balanceUpdatePeriods\" where \"period\" = date '2026-11-01' for update";
 
     @Autowired
     private TimeDepositPersistenceAdapter deposits;
 
     @Autowired
-    private IdempotencyKeyPersistenceAdapter keys;
+    private BalanceUpdatePeriodPersistenceAdapter periods;
 
     @Autowired
     private DataSource dataSource;
@@ -62,7 +76,7 @@ class BalanceUpdateLockingTest {
 
     @AfterEach
     void cleanUp() {
-        jdbc.sql("delete from \"idempotencyKeys\"").update();
+        jdbc.sql("delete from \"balanceUpdatePeriods\"").update();
         jdbc.sql("delete from \"withdrawals\"").update();
         jdbc.sql("delete from \"timeDeposits\"").update();
     }
@@ -88,63 +102,95 @@ class BalanceUpdateLockingTest {
         }
     }
 
-    private void insertInProgress(String key, Instant createdAt) {
+    private void insertInProgress(YearMonth period, Instant createdAt) {
         jdbc.sql("""
-                insert into "idempotencyKeys" ("idempotencyKey", "status", "createdAt") values (?, 'IN_PROGRESS', ?)
-                """).params(key, createdAt.atOffset(ZoneOffset.UTC)).update();
+                insert into "balanceUpdatePeriods" ("period", "status", "createdAt") values (?, 'IN_PROGRESS', ?)
+                """).params(period.atDay(1), createdAt.atOffset(ZoneOffset.UTC)).update();
     }
 
-    // P9: a key row locked by a running run is skipped, so the duplicate gets 409 instead of waiting.
+    private void insertCompleted(YearMonth period, BalanceUpdateOutcome outcome) {
+        OffsetDateTime executedAt = outcome.executedAt().atOffset(ZoneOffset.UTC);
+        jdbc.sql("""
+                insert into "balanceUpdatePeriods"
+                    ("period", "status", "processedCount", "executedAt", "createdAt", "completedAt")
+                values (?, 'COMPLETED', ?, ?, ?, ?)
+                """).params(period.atDay(1), outcome.processedCount(), executedAt, executedAt, executedAt).update();
+    }
+
+    // P9: a month row locked by a running run is skipped, so the duplicate gets 409 instead of waiting.
     @Test
-    void skipsAKeyLockedByARun() throws SQLException {
-        insertInProgress("k", NOW);
+    void skipsAMonthLockedByARun() throws SQLException {
+        insertInProgress(NOVEMBER, NOW);
 
-        whileLockedBy("select 1 from \"idempotencyKeys\" where \"idempotencyKey\" = 'k' for update",
-                () -> assertThat(inTransaction(() -> keys.findUnlocked("k"))).isEmpty());
+        whileLockedBy(LOCK_NOVEMBER, () -> assertThat(inTransaction(() -> periods.findUnlocked(NOVEMBER))).isEmpty());
     }
 
-    // P12: the purge never deletes, and never waits for, a row a run holds locked.
+    // P16: a plain read returns a locked month at once; a locking read (FOR SHARE, FOR UPDATE) would hit lock_timeout.
+    @ParameterizedTest(name = "completed: {0}")
+    @ValueSource(booleans = {true, false})
+    void findDoesNotWaitForALockedMonth(boolean completed) throws SQLException {
+        if (completed) {
+            insertCompleted(NOVEMBER, OUTCOME);
+        } else {
+            insertInProgress(NOVEMBER, NOW);
+        }
+        BalanceUpdatePeriodState expected = completed ? new Completed(OUTCOME) : new InProgress(NOW);
+
+        whileLockedBy(LOCK_NOVEMBER,
+                () -> assertThat(inTransaction(() -> periods.find(NOVEMBER))).contains(expected));
+    }
+
+    // P16: find takes no row lock, so another transaction can lock the month without waiting while find's is open.
     @Test
-    void purgeSkipsALockedRow() throws SQLException {
-        insertInProgress("locked", NOW.minusSeconds(48 * 3600));
-        insertInProgress("abandoned", NOW.minusSeconds(48 * 3600));
+    void findTakesNoRowLock() {
+        insertCompleted(NOVEMBER, OUTCOME);
 
-        whileLockedBy("select 1 from \"idempotencyKeys\" where \"idempotencyKey\" = 'locked' for update",
-                () -> inTransaction(() -> {
-                    keys.purge(NOW.minusSeconds(24 * 3600));
-                    return null;
-                }));
-
-        assertThat(jdbc.sql("select \"idempotencyKey\" from \"idempotencyKeys\"").query(String.class).list())
-                .containsExactly("locked");
+        inTransaction(() -> {
+            assertThat(periods.find(NOVEMBER)).isPresent();
+            try {
+                whileLockedBy(LOCK_NOVEMBER + " nowait", () -> { });
+            } catch (SQLException lockNotAvailable) {
+                throw new AssertionError("find left the month locked", lockNotAvailable);
+            }
+            return null;
+        });
     }
 
-    // ADR-0012, unverified until here: ON CONFLICT DO NOTHING does not wait for a row that is only locked.
+    // ADR-0012, unverified until then: ON CONFLICT DO NOTHING does not wait for a row that is only locked.
     @Test
     void reservationDoesNotWaitForALockedOnlyRow() throws SQLException {
-        insertInProgress("k", NOW);
+        insertInProgress(NOVEMBER, NOW);
 
-        whileLockedBy("select 1 from \"idempotencyKeys\" where \"idempotencyKey\" = 'k' for update",
-                () -> assertThat(inTransaction(() -> keys.reserve("k", NOW.plusSeconds(1)))).isFalse());
+        whileLockedBy(LOCK_NOVEMBER,
+                () -> assertThat(inTransaction(() -> periods.reserve(NOVEMBER, NOW.plusSeconds(1)))).isFalse());
     }
 
-    // S6: the JPA balance write and the JdbcClient key statements join the same Spring transaction, so the key's switch
-    // and the balances commit or roll back together (ADR-0006, ADR-0012, E).
+    // P15: a locked month (e.g. a run of the previous month) never blocks reserving another month.
     @Test
-    void balanceWritesAndKeyStatementsRollBackTogether() {
+    void reservingAnotherMonthDoesNotWaitForALockedMonth() throws SQLException {
+        insertInProgress(OCTOBER, NOW.minusSeconds(3600));
+
+        whileLockedBy("select 1 from \"balanceUpdatePeriods\" where \"period\" = date '2026-10-01' for update",
+                () -> assertThat(inTransaction(() -> periods.reserve(NOVEMBER, NOW))).isTrue());
+    }
+
+    // S6: the JPA balance write and the JdbcClient period statements join the same Spring transaction, so the month's
+    // switch and the balances commit or roll back together (ADR-0012, E; ADR-0013).
+    @Test
+    void balanceWritesAndPeriodStatementsRollBackTogether() {
         int id = new TimeDepositRows(jdbc).insertDeposit("basic", 31, "1000.00");
 
         new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
             var deposit = deposits.loadAllForUpdate().getFirst();
             deposit.setBalance(1000.83);
             deposits.saveBalances(List.of(deposit));
-            keys.reserve("k", NOW);
+            periods.reserve(NOVEMBER, NOW);
             status.setRollbackOnly();
         });
 
         assertThat(jdbc.sql("select \"balance\"::text from \"timeDeposits\" where \"id\" = ?").param(id)
                 .query(String.class).single()).isEqualTo("1000.00");
-        assertThat(jdbc.sql("select count(*) from \"idempotencyKeys\"").query(Integer.class).single()).isZero();
+        assertThat(jdbc.sql("select count(*) from \"balanceUpdatePeriods\"").query(Integer.class).single()).isZero();
     }
 
     // ADR-0012, A, unverified until here: Hibernate's PESSIMISTIC_WRITE on PostgreSQL locks the deposits

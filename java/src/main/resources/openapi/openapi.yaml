@@ -51,26 +51,16 @@ paths:
       tags: [TimeDeposits]
       summary: Apply monthly interest to all time deposits
       description: >
-        Applies one round of the monthly interest rules to every time deposit and stores the new balances.
-        Not idempotent: each call applies interest again, unless the same Idempotency-Key is reused.
-        Runs are serialised: concurrent requests are processed one after another, never in parallel.
-      parameters:
-        - name: Idempotency-Key
-          in: header
-          required: false
-          description: >
-            Client-generated unique key (1-255 characters). A repeated request with the same key returns the
-            original outcome (same status and body, including the original executedAt) without applying interest
-            again. A request that failed is not stored, so retrying it with the same key runs the update.
-            Keys are retained for 24 hours.
-          schema:
-            type: string
-            minLength: 1
-            maxLength: 255
-          example: 6c5f1d2e-4a8b-4c3d-9e7f-1a2b3c4d5e6f
+        Applies one round of the monthly interest rules to every time deposit and stores the new balances,
+        at most once per calendar month (UTC): the first request of a month applies the interest, every further
+        request in that month returns that month's outcome without applying it again.
+        Runs never overlap: while this month's run is in progress, further requests of the month get 409;
+        runs of different months are applied one after another.
       responses:
         '200':
-          description: Balances updated (or the original outcome replayed for a reused Idempotency-Key).
+          description: >
+            The month's outcome: interest applied by this request, or by an earlier request in the same calendar
+            month (UTC), whose outcome is returned unchanged.
           content:
             application/json:
               schema:
@@ -78,19 +68,8 @@ paths:
               example:
                 processedCount: 5
                 executedAt: '2026-10-31T10:15:00Z'
-        '400':
-          description: Malformed Idempotency-Key (empty or longer than 255 characters).
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/Problem'
-              example:
-                type: about:blank
-                title: Bad Request
-                status: 400
-                detail: Idempotency-Key must be 1 to 255 characters long.
         '409':
-          description: A request with the same Idempotency-Key is still in progress; retry later.
+          description: The balance update for this calendar month (UTC) is still in progress; retry later.
           content:
             application/problem+json:
               schema:
@@ -99,7 +78,7 @@ paths:
                 type: about:blank
                 title: Conflict
                 status: 409
-                detail: A request with this Idempotency-Key is still being processed.
+                detail: A balance update for this month is still in progress.
         '500':
           $ref: '#/components/responses/InternalServerError'
 components:

@@ -1,6 +1,7 @@
 # ADR-0012: Balance update consistency
 
-- **Status:** Accepted; partly superseded by [ADR-0013](0013-interest-periods.md)
+- **Status:** Accepted; partly superseded by [ADR-0013](0013-interest-periods.md) and
+  [ADR-0014](0014-replay-completed-month-without-lock.md)
 - **Date:** 2026-11-01
 
 ## Context

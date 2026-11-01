@@ -62,17 +62,28 @@ class ApiCorsConfigurationTest {
     class Preflight {
 
         @Test
-        void answersPreflightForPostWithIdempotencyKeyFromSwaggerUiOrigin() {
+        void answersPreflightForPostWithContentTypeFromSwaggerUiOrigin() {
             MvcTestResult result = mvc.options().uri(BALANCE_UPDATES)
                     .header(ORIGIN, SWAGGER_UI)
                     .header(ACCESS_CONTROL_REQUEST_METHOD, "POST")
-                    .header(ACCESS_CONTROL_REQUEST_HEADERS, "idempotency-key")
+                    .header(ACCESS_CONTROL_REQUEST_HEADERS, "content-type")
                     .exchange();
 
             assertThat(result).hasStatusOk().hasHeader(ACCESS_CONTROL_ALLOW_ORIGIN, SWAGGER_UI);
             assertThat(result.getResponse().getHeader(ACCESS_CONTROL_ALLOW_METHODS)).contains("POST");
             assertThat(result.getResponse().getHeader(ACCESS_CONTROL_ALLOW_HEADERS))
-                    .containsIgnoringCase("idempotency-key");
+                    .containsIgnoringCase("content-type");
+        }
+
+        // ADR-0013 removed the Idempotency-Key from the contract and from the allowed request headers.
+        @Test
+        void rejectsPreflightRequestingTheRemovedIdempotencyKey() {
+            assertThat(mvc.options().uri(BALANCE_UPDATES)
+                    .header(ORIGIN, SWAGGER_UI)
+                    .header(ACCESS_CONTROL_REQUEST_METHOD, "POST")
+                    .header(ACCESS_CONTROL_REQUEST_HEADERS, "idempotency-key"))
+                    .hasStatus(HttpStatus.FORBIDDEN)
+                    .doesNotContainHeader(ACCESS_CONTROL_ALLOW_ORIGIN);
         }
 
         // A preflight is answered by the framework (ADR-0005) and never runs the operation.
@@ -117,12 +128,12 @@ class ApiCorsConfigurationTest {
             MvcTestResult result = mvc.options().uri(BALANCE_UPDATES)
                     .header(ORIGIN, SWAGGER_UI)
                     .header(ACCESS_CONTROL_REQUEST_METHOD, "POST")
-                    .header(ACCESS_CONTROL_REQUEST_HEADERS, "idempotency-key, x-debug")
+                    .header(ACCESS_CONTROL_REQUEST_HEADERS, "content-type, x-debug")
                     .exchange();
 
             assertThat(result).hasStatusOk();
             assertThat(result.getResponse().getHeader(ACCESS_CONTROL_ALLOW_HEADERS))
-                    .containsIgnoringCase("idempotency-key")
+                    .containsIgnoringCase("content-type")
                     .doesNotContainIgnoringCase("x-debug");
         }
 
@@ -159,11 +170,10 @@ class ApiCorsConfigurationTest {
         // Without this header the browser hides the error from Swagger UI ("Failed to fetch").
         @Test
         void addsAllowOriginToTheProblemResponseOfPost() {
-            given(applyMonthlyInterest.applyMonthlyInterest("k")).willThrow(new IllegalStateException("run failed"));
+            given(applyMonthlyInterest.applyMonthlyInterest()).willThrow(new IllegalStateException("run failed"));
 
             assertThat(mvc.post().uri(BALANCE_UPDATES)
-                    .header(ORIGIN, SWAGGER_UI)
-                    .header("Idempotency-Key", "k"))
+                    .header(ORIGIN, SWAGGER_UI))
                     .hasStatus(HttpStatus.INTERNAL_SERVER_ERROR)
                     .hasContentType(MediaType.APPLICATION_PROBLEM_JSON)
                     .hasHeader(ACCESS_CONTROL_ALLOW_ORIGIN, SWAGGER_UI)

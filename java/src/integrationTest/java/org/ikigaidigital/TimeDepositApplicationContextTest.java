@@ -39,7 +39,7 @@ class TimeDepositApplicationContextTest {
     @BeforeEach
     void truncateTables() {
         jdbc = JdbcClient.create(dataSource);
-        jdbc.sql("truncate \"withdrawals\", \"timeDeposits\", \"idempotencyKeys\" restart identity").update();
+        jdbc.sql("truncate \"withdrawals\", \"timeDeposits\", \"balanceUpdatePeriods\" restart identity").update();
     }
 
     // No test transaction here: the withdrawals must already be loaded when the use case returns (no lazy loading).

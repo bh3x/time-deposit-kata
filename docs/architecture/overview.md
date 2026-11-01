@@ -18,7 +18,7 @@ flowchart LR
   ui["Swagger UI container<br/>serves the UI and openapi.yaml"] -- "page + contract" --> browser["Browser<br/>(Swagger UI page)"]
   browser -- "HTTP calls (CORS)" --> app
   client["API client (curl)"] --> app
-  app["Time Deposit Service<br/>Java 25 · Spring Boot 4.1<br/>(ADR-0007)"] -- "JDBC / JPA" --> db[("PostgreSQL<br/>timeDeposits · withdrawals · idempotencyKeys<br/>(ADR-0006)")]
+  app["Time Deposit Service<br/>Java 25 · Spring Boot 4.1<br/>(ADR-0007)"] -- "JDBC / JPA" --> db[("PostgreSQL<br/>timeDeposits · withdrawals · balanceUpdatePeriods<br/>(ADR-0006, ADR-0013)")]
 ```
 - The application serves exactly the two contract operations; Swagger UI runs as its own container
   (ADR-0005). How the UI reaches the API (server URL, CORS) is settled in the Docker step.
@@ -97,23 +97,31 @@ sequenceDiagram
 sequenceDiagram
   participant C as Client
   participant R as TimeDepositsController
-  participant S as ApplyMonthlyInterestService (@Transactional)
+  participant S as ApplyMonthlyInterestService (no transaction)
+  participant V as BalanceUpdatePeriodReservations
+  participant M as MonthlyInterestRun (@Transactional)
   participant K as TimeDepositCalculator
-  participant P as Persistence adapter
-  C->>R: POST /api/v1/balance-updates [Idempotency-Key]
-  R->>S: apply(key)
-  S->>P: LoadTimeDepositsPort.loadAll()
-  P-->>S: List<TimeDeposit>
-  S->>K: updateBalance(list)
-  S->>P: SaveTimeDepositsPort.saveAll(list)
-  S-->>R: BalanceUpdateResult(processedCount, executedAt)
-  R-->>C: 200 BalanceUpdate
+  participant P as Persistence adapters
+  C->>R: POST /api/v1/balance-updates
+  R->>S: applyMonthlyInterest()
+  S->>V: reserve() — UTC month of now, own transaction
+  V->>P: insert month IN_PROGRESS (or read it: COMPLETED → replay, in progress → 409, stale → take over, ADR-0014)
+  S->>M: apply(month, token)
+  M->>P: lock month row, check the fence
+  M->>P: LoadTimeDepositsPort.loadAllForUpdate()
+  M->>K: updateBalance(list)
+  M->>P: SaveTimeDepositsPort.saveBalances(list)
+  M->>P: complete month (exactly one row)
+  M-->>S: Succeeded(processedCount, executedAt)
+  S-->>R: result (on failure: release the month)
+  R-->>C: 200 BalanceUpdate, or 409 Problem Details
 ```
-Pending the planned *Balance update consistency* ADR (list in ADR-0008): serialising concurrent runs and writers,
-the idempotency flow (reservation, replay, in-flight `409`, stale keys, cleanup), single-deposit failures such as
-overflow, and behaviour at scale.
+At most one run per UTC calendar month (ADR-0013), with ADR-0012's serialisation (row locks), reservation, liveness
+(`SKIP LOCKED`), stale takeover, fence and release keyed by the month; a failing deposit aborts the whole run.
 
 ## 5. Cross-cutting concerns
+- **Data model:** tables, columns, constraints and the Java mapping as they are today:
+  [data-model.md](data-model.md).
 - **Money:** stored as `NUMERIC(15,2)` (ADR-0006); the legacy domain computes in `Double`; the persistence adapter
   reads with `BigDecimal.doubleValue()` and writes with `BigDecimal.valueOf(..).setScale(2, HALF_UP)`; the API
   shows decimal strings with two fraction digits (ADR-0004).
@@ -136,6 +144,6 @@ overflow, and behaviour at scale.
 | API conventions, errors | [ADR-0003](../adr/0003-api-conventions.md) |
 | Time deposit API design | [ADR-0004](../adr/0004-time-deposit-api-design.md) |
 | Endpoint scope | [ADR-0005](../adr/0005-endpoint-scope.md) |
-| Data model | [ADR-0006](../adr/0006-data-model.md) |
+| Data model (current state: [data-model.md](data-model.md)) | [ADR-0006](../adr/0006-data-model.md), [ADR-0013](../adr/0013-interest-periods.md) |
 | Technology stack and build | [ADR-0007](../adr/0007-technology-stack-and-build.md) |
 | Hexagonal architecture | [ADR-0008](../adr/0008-hexagonal-architecture.md) |
