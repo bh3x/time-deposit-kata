@@ -222,6 +222,29 @@ class TimeDepositSchemaTest {
             assertThat(stored).isEqualTo(planType);
         }
 
+        // Known issue #8 (ADR-0011): pins what PostgreSQL does with non-finite balances, which the calculator cannot
+        // round. Observed, not designed: whether the schema should change belongs to the balance update consistency ADR.
+        // The value is cast in SQL, because java.math.BigDecimal (used by TimeDepositRows) cannot hold it.
+        @Test
+        void acceptsANotANumberBalance() {
+            insertBasicDepositWithBalance("NaN");
+
+            String stored = jdbc.sql("select \"balance\"::text from \"timeDeposits\"").query(String.class).single();
+            assertThat(stored).isEqualTo("NaN");
+        }
+
+        @ParameterizedTest(name = "balance {0} rejected")
+        @ValueSource(strings = {"Infinity", "-Infinity"})
+        void rejectsAnInfiniteBalance(String balance) {
+            assertRejected(() -> insertBasicDepositWithBalance(balance), NUMERIC_OUT_OF_RANGE);
+        }
+
+        private void insertBasicDepositWithBalance(String balance) {
+            jdbc.sql("""
+                    insert into "timeDeposits" ("planType", "days", "balance") values ('basic', 31, ?::numeric)
+                    """).param(balance).update();
+        }
+
         @Test
         void rejectsAnExplicitId() {
             assertRejected(() -> jdbc.sql("""

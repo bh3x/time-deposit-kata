@@ -7,6 +7,10 @@ import com.tngtech.archunit.lang.ArchRule;
 import org.ikigaidigital.TimeDeposit;
 import org.ikigaidigital.TimeDepositApplication;
 import org.ikigaidigital.TimeDepositCalculator;
+import org.ikigaidigital.timedeposit.domain.ReadOnlyTimeDeposit;
+import org.ikigaidigital.timedeposit.domain.TimeDepositTerms;
+import org.ikigaidigital.timedeposit.domain.interest.InterestPolicies;
+import org.ikigaidigital.timedeposit.domain.interest.InterestPolicy;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
 import static com.tngtech.archunit.core.domain.JavaClass.Predicates.belongToAnyOf;
@@ -40,11 +44,14 @@ class LegacyRootPackageArchitectureTest {
             .that().belongToAnyOf(TimeDeposit.class)
             .should().onlyDependOnClassesThat().resideInAPackage("java..");
 
-    // ADR-0008 rule 5: the calculator uses no framework. It is widened to timedeposit.domain (rule 1's named
-    // exception) when it starts delegating to the interest policies in the refactoring step.
+    // ADR-0008 rule 5 and ADR-0011: the calculator uses no framework and knows no plan. Beyond the JDK and the kernel
+    // it sees only the registry, the policy interface and the read-only terms (rule 1's named exception); concrete
+    // policies such as RateWindowPolicy are not on the list, so plan knowledge cannot creep back in.
     @ArchTest
-    static final ArchRule calculatorDependsOnlyOnTheJdkAndTimeDeposit = classes()
+    static final ArchRule calculatorDependsOnlyOnTheJdkTheKernelAndThePolicyRegistry = classes()
             .that().belongToAnyOf(TimeDepositCalculator.class)
             .should().onlyDependOnClassesThat(
-                    resideInAPackage("java..").or(belongToAnyOf(TimeDeposit.class, TimeDepositCalculator.class)));
+                    resideInAPackage("java..").or(belongToAnyOf(TimeDeposit.class, TimeDepositCalculator.class,
+                            InterestPolicies.class, InterestPolicy.class, ReadOnlyTimeDeposit.class,
+                            TimeDepositTerms.class)));
 }
