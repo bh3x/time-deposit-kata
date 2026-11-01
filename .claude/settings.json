@@ -30,7 +30,6 @@
     ],
     "ask": [
       "Bash(git push origin --delete:*)",
-      "Bash(git checkout:*)",
       "Bash(git merge:*)",
       "Bash(git rebase:*)",
       "Bash(git reset:*)",
