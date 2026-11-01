@@ -93,7 +93,7 @@ follow [ADR-0012](adr/0012-balance-update-consistency.md) (*Balance update consi
 ### Both endpoints
 | # | Scenario | Level |
 |---|---|---|
-| R1 | Only the two operations are mapped: an unknown path, `GET /error`, `/v3/api-docs`, `/swagger-ui.html`, `/actuator`, `/actuator/health` and `/index.html` → `404` Problem Details (ADR-0005) | end-to-end |
+| R1 | Only the two operations are mapped: an unknown path, `GET /error`, `/v3/api-docs`, `/swagger-ui.html`, `/actuator`, `/actuator/health` and `/index.html` → `404` Problem Details, also for near misses of the real paths (trailing slash, other case, other version) and for `OPTIONS` or a CORS preflight on an unknown path; a guard on the running context lists every handler mapping, so a route nobody probes still fails (ADR-0005) | end-to-end |
 | R2 | A wrong method on a known path → `405` Problem Details (ADR-0005) | end-to-end |
 | R3 | A CORS preflight for `POST` with `Idempotency-Key` is answered for the Swagger UI origin¹; other origins, headers and methods are rejected (ADR-0010) | web slice (rules) + end-to-end (preflight) |
 | R4 | `HEAD` and `OPTIONS` on both paths are answered from the existing mappings, without extra routes (ADR-0005) | end-to-end |

@@ -26,7 +26,8 @@ Both ports are published on `localhost` only.
 - `docker compose ps` lists `postgres` as healthy and `app` and `swagger-ui` as running.
 - `curl http://localhost:8080/api/v1/time-deposits` returns a JSON array of 15 demo deposits.
 - http://localhost:8081 shows the "XA Bank Time Deposit API" contract.
-- `curl -i http://localhost:8080/actuator/health` returns `404`: the application serves only the two operations.
+- `curl -i http://localhost:8080/actuator/health` and `curl -i http://localhost:8080/error` return `404` Problem
+  Details: the application serves only the two operations.
 
 ### Trigger the endpoints with Swagger UI
 1. Open http://localhost:8081 (use `localhost`, not `127.0.0.1`: the API allows cross-origin calls from
