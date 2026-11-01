@@ -1,6 +1,6 @@
 # ADR-0011: Interest calculation design
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-11-01
 
 ## Context
