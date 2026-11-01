@@ -1,7 +1,8 @@
 # Testing guide
 
 How to test changes in this repository. The decisions and their reasons are in
-[ADR-0009](adr/0009-testing-strategy.md); the architecture they refer to is in
+[ADR-0009](adr/0009-testing-strategy.md), refined by [ADR-0015](adr/0015-testing-strategy-as-built.md); the
+architecture they refer to is in
 [ADR-0008](adr/0008-hexagonal-architecture.md).
 
 ## Running the tests
@@ -9,7 +10,7 @@ How to test changes in this repository. The decisions and their reasons are in
 |---|---|---|
 | `./gradlew test` | unit, web slice and architecture tests (`src/test`) | no |
 | `./gradlew check` | everything, incl. integration and end-to-end tests (`src/integrationTest`) | yes |
-| `./gradlew jacocoTestReport` | coverage report (`build/reports/jacoco/`): the unit suite today, both suites once `src/integrationTest` has tests | as for the suites included |
+| `./gradlew jacocoTestReport` | both suites, then one coverage report (`build/reports/jacoco/test/html/`) | yes |
 
 `./gradlew check` must be green for every pull request.
 
@@ -19,7 +20,7 @@ How to test changes in this repository. The decisions and their reasons are in
 | a domain rule (calculator, interest policy) | unit test | none | `src/test`, package of the class |
 | a use case (`…Service`) | sociable unit test through its `port.in` | in-memory fakes of `port.out` (`…/application/port/out/fake/`) | `src/test`, package of the service |
 | HTTP mapping, status code, JSON, Problem Details | web slice test (`@WebMvcTest`, `MockMvcTester`) | use cases as `@MockitoBean` | `src/test`, `adapter/in/rest` package |
-| schema, a query, mapping or constraint | `@DataJpaTest` on PostgreSQL | none | `src/integrationTest`, `adapter/out/persistence` package |
+| schema, a query, mapping or constraint | `@DataJpaTest` on PostgreSQL | none; a pass-through recorder that stubs nothing is allowed, e.g. to check SQL text (ADR-0015) | `src/integrationTest`, `adapter/out/persistence` package |
 | the whole flow, a transaction across service and database, which routes exist | end-to-end test (`@SpringBootTest`; `RestTestClient` where HTTP matters) | none | `src/integrationTest` |
 | a package dependency rule | ArchUnit rule | – | `src/test/.../architecture` |
 
@@ -58,7 +59,7 @@ S2, S6 and S8 follow [ADR-0012](adr/0012-balance-update-consistency.md) (*Balanc
 | G3 | A deposit without withdrawals has `"withdrawals": []`, never a missing field | persistence + web slice |
 | G4 | Deposits ordered by internal key, withdrawals by `date` then internal id | persistence |
 | G5 | Balances as two-decimal strings, HALF_UP: `1000.9300000000001` → `"1000.93"`, `0` → `"0.00"`, `0.005` → `"0.01"`, large values (unit owns the cases; the slice checks one sample) | unit + web slice |
-| G6 | No internal key and no `timeDepositId` in the response | web slice + contract validation |
+| G6 | No internal key and no `timeDepositId` in the response | web slice (strict JSON) + generated interface and DTOs (ADR-0015) |
 | G7 | Unknown plan types are listed unchanged (e.g. `"gold"`) | web slice |
 
 ### `POST /api/v1/balance-updates`
@@ -107,7 +108,7 @@ only known once that step decides the server URL (ADR-0005, Consequences).
 
 ## Quality checks
 - **Coverage:** read the JaCoCo report to find untested branches; there is no threshold.
-- **Test strength:** run PIT (mutation testing) for the domain and application packages before a refactoring pull
-  request, once the plugin is added (recommended). For targeted checks, temporarily break the code and show which
-  tests fail; never commit the mutant, and restore the file from a copy — `git checkout -- <file>` resets it to the
-  last commit and discards uncommitted work.
+- **Test strength:** PIT is deferred (ADR-0015, *Planned decisions*). Use targeted manual mutants instead:
+  temporarily break the code a pull request changes, show which tests fail and record it in the pull request; never
+  commit the mutant, and restore the file by editing it back — `git checkout -- <file>` resets it to the last
+  commit and discards uncommitted work.
