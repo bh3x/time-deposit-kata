@@ -11,7 +11,8 @@ The solution is implemented in **Java** inside `java/`. The other language folde
 - Exactly **two** REST endpoints, defined contract-first in `java/src/main/resources/openapi/openapi.yaml`
   (source of truth; decisions in ADR-0002, ADR-0003, ADR-0004, ADR-0005):
   - `GET /api/v1/time-deposits` — list all time deposits (`id`, `planType`, `balance`, `days`, `withdrawals`)
-  - `POST /api/v1/balance-updates` — apply monthly interest (`updateBalance`) to all stored time deposits
+  - `POST /api/v1/balance-updates` — apply monthly interest (`updateBalance`) to all stored time deposits, at most
+    once per UTC calendar month; later requests in the month return its outcome (ADR-0013)
 - API changes start in the contract; never add endpoints beyond these two. Future ideas are recorded in a new ADR
   (see ADR-0004 *Future extensions*).
 - `TimeDeposit` has no withdrawals: the list response is built from a separate model/read path, never by changing
