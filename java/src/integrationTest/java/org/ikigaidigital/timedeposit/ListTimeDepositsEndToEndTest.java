@@ -13,9 +13,8 @@ import org.springframework.test.json.JsonCompareMode;
 import org.springframework.test.web.servlet.client.RestTestClient;
 
 import javax.sql.DataSource;
-import java.math.BigDecimal;
-import java.time.LocalDate;
-import java.util.UUID;
+
+import static org.ikigaidigital.timedeposit.TimeDepositRows.uuid;
 
 /**
  * {@code GET /api/v1/time-deposits} end to end (docs/testing.md G1): HTTP, controller, use case, persistence adapter
@@ -33,20 +32,21 @@ class ListTimeDepositsEndToEndTest {
     @Autowired
     private DataSource dataSource;
 
-    private JdbcClient jdbc;
+    private TimeDepositRows rows;
 
     @BeforeEach
     void truncateTables() {
-        jdbc = JdbcClient.create(dataSource);
+        JdbcClient jdbc = JdbcClient.create(dataSource);
         jdbc.sql("truncate \"withdrawals\", \"timeDeposits\", \"idempotencyKeys\" restart identity").update();
+        rows = new TimeDepositRows(jdbc);
     }
 
     @Test
     void listsEveryStoredDepositWithItsWithdrawals() {
-        int basic = insertDeposit(uuid(1), "basic", 400, "1000.93");
-        insertWithdrawal(uuid(11), basic, "100.00", "2026-06-01");
-        insertWithdrawal(uuid(12), basic, "50.00", "2026-07-01");
-        insertDeposit(uuid(2), "gold", 0, "0.00");
+        int basic = rows.insertDeposit(uuid(1), "basic", 400, "1000.93");
+        rows.insertWithdrawal(uuid(11), basic, "100.00", "2026-06-01");
+        rows.insertWithdrawal(uuid(12), basic, "50.00", "2026-07-01");
+        rows.insertDeposit(uuid(2), "gold", 0, "0.00");
 
         // Lenient: the order of deposits is not part of the contract (ADR-0004).
         client.get().uri("/api/v1/time-deposits")
@@ -63,28 +63,5 @@ class ListTimeDepositsEndToEndTest {
                                           {"id": "00000000-0000-4000-8000-000000000012", "amount": "50.00",
                                            "date": "2026-07-01"}]}]
                         """, JsonCompareMode.LENIENT);
-    }
-
-    // Same scheme as TimeDepositFixtures.uuid, which lives in the unit test suite.
-    private static UUID uuid(int number) {
-        return UUID.fromString("00000000-0000-4000-8000-%012d".formatted(number));
-    }
-
-    private int insertDeposit(UUID publicId, String planType, int days, String balance) {
-        return jdbc.sql("""
-                        insert into "timeDeposits" ("publicId", "planType", "days", "balance")
-                        values (?, ?, ?, ?) returning "id"
-                        """)
-                .params(publicId, planType, days, new BigDecimal(balance))
-                .query(Integer.class).single();
-    }
-
-    private void insertWithdrawal(UUID publicId, int timeDepositId, String amount, String date) {
-        jdbc.sql("""
-                        insert into "withdrawals" ("publicId", "timeDepositId", "amount", "date")
-                        values (?, ?, ?, ?)
-                        """)
-                .params(publicId, timeDepositId, new BigDecimal(amount), LocalDate.parse(date))
-                .update();
     }
 }

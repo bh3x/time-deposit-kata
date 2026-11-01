@@ -1,4 +1,4 @@
-package org.ikigaidigital.timedeposit.adapter.out.persistence;
+package org.ikigaidigital.timedeposit;
 
 import org.springframework.jdbc.core.simple.JdbcClient;
 
@@ -8,17 +8,26 @@ import java.util.UUID;
 
 /**
  * Inserts rows with plain SQL and the quoted camelCase names of ADR-0006, so tests state exactly the data they depend
- * on (ADR-0009) and exercise the schema rather than the JPA mapping.
+ * on (ADR-0009) and exercise the schema rather than the JPA mapping. Shared by the persistence and end-to-end tests
+ * of the integration suite.
  */
-final class TimeDepositRows {
+public final class TimeDepositRows {
 
     private final JdbcClient jdbc;
 
-    TimeDepositRows(JdbcClient jdbc) {
+    public TimeDepositRows(JdbcClient jdbc) {
         this.jdbc = jdbc;
     }
 
-    int insertDeposit(String planType, int days, String balance) {
+    /**
+     * A fixed, valid version-4 UUID per number; the same scheme as {@code TimeDepositFixtures.uuid} in the unit suite,
+     * which this suite cannot see.
+     */
+    public static UUID uuid(int number) {
+        return UUID.fromString("00000000-0000-4000-8000-%012d".formatted(number));
+    }
+
+    public int insertDeposit(String planType, int days, String balance) {
         return jdbc.sql("""
                         insert into "timeDeposits" ("planType", "days", "balance")
                         values (?, ?, ?) returning "id"
@@ -27,7 +36,7 @@ final class TimeDepositRows {
                 .query(Integer.class).single();
     }
 
-    int insertDeposit(UUID publicId, String planType, int days, String balance) {
+    public int insertDeposit(UUID publicId, String planType, int days, String balance) {
         return jdbc.sql("""
                         insert into "timeDeposits" ("publicId", "planType", "days", "balance")
                         values (?, ?, ?, ?) returning "id"
@@ -36,7 +45,7 @@ final class TimeDepositRows {
                 .query(Integer.class).single();
     }
 
-    int insertWithdrawal(UUID publicId, int timeDepositId, String amount, String date) {
+    public int insertWithdrawal(UUID publicId, int timeDepositId, String amount, String date) {
         return jdbc.sql("""
                         insert into "withdrawals" ("publicId", "timeDepositId", "amount", "date")
                         values (?, ?, ?, ?) returning "id"
@@ -45,7 +54,7 @@ final class TimeDepositRows {
                 .query(Integer.class).single();
     }
 
-    int insertWithdrawal(int timeDepositId, String amount, String date) {
+    public int insertWithdrawal(int timeDepositId, String amount, String date) {
         return jdbc.sql("""
                         insert into "withdrawals" ("timeDepositId", "amount", "date")
                         values (?, ?, ?) returning "id"
