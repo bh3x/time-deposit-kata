@@ -75,8 +75,8 @@ Defined in ADR-0008 (the source of truth; any deviation needs a new ADR). Summar
    dependency, or a deviation from the brief. Git state changes still prompt as configured in
    `.claude/settings.json`.
 3. Ask decisions as selectable interview questions (2–4 options, recommendation marked first). Start every
-   increment by proposing 2–4 candidate `/step <branch> <goal>` invocations as options; create the branch only
-   after the plan is approved.
+   increment by proposing 2–4 candidate `/step <branch> <goal>` invocations as options; `/step` creates the branch
+   from an up-to-date `main` first, then designs tests and plans, and changes no files until the plan is approved.
 4. Explain the *why* behind Java/Spring design choices.
 
 ### Context first
