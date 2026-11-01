@@ -7,10 +7,11 @@ WORKDIR /workspace
 COPY gradlew settings.gradle.kts build.gradle.kts ./
 COPY gradle gradle
 COPY src/main src/main
-# The cache mount keeps Gradle and its dependencies between builds; the plain jar is not needed.
+# The cache mount keeps Gradle and its dependencies between builds. Exactly one boot jar is expected (the plain jar
+# is not needed); cp fails the build if there is none or more than one.
 RUN --mount=type=cache,target=/root/.gradle \
-    ./gradlew --no-daemon --quiet bootJar \
-    && find build/libs -name '*.jar' ! -name '*-plain.jar' -exec cp {} app.jar \;
+    ./gradlew --no-daemon --console=plain bootJar \
+    && cp $(find build/libs -name '*.jar' ! -name '*-plain.jar') app.jar
 
 FROM eclipse-temurin:25.0.5_8-jre-noble
 RUN groupadd --system app && useradd --system --gid app --no-create-home app

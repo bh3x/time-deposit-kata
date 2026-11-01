@@ -35,11 +35,12 @@ Constraints: a reviewer may have Docker but no JDK 25; the application maps no r
 3. **Jar built on the host, copied in** — fast image build, but needs a local JDK.
 
 ## Decision
-- **Topology:** `java/compose.yaml` with three services: `postgres` (`postgres:18.6`, healthcheck `pg_isready`),
-  `app` (port 8080, profile `demo`, datasource from `SPRING_DATASOURCE_*`, starts once `postgres` is healthy) and
-  `swagger-ui` (`swaggerapi/swagger-ui`, port 8081, serving the read-only `openapi.yaml`). No application
-  healthcheck: the application has no health route (ADR-0005). Credentials are local-only defaults in the Compose
-  file, not secrets.
+- **Topology:** `java/compose.yaml` with three services: `postgres` (`postgres:18.6`, healthcheck `pg_isready`
+  over TCP, since first-start init listens on the Unix socket only), `app` (port 8080, profile `demo`, datasource
+  from `SPRING_DATASOURCE_*`, starts once `postgres` is healthy, restarts on failure) and `swagger-ui`
+  (`swaggerapi/swagger-ui`, port 8081, serving the read-only `openapi.yaml`). Ports are published on `127.0.0.1`
+  only, since the API has no authentication. No application healthcheck: the application has no health route
+  (ADR-0005). Credentials are local-only defaults in the Compose file, not secrets.
 - **Swagger UI to API: option 1.** The contract lists `http://localhost:8080/api/v1` first (Swagger UI's default
   server) and keeps `/api/v1` for same-origin clients. The generated base path stays `/api/v1`.
 - **CORS: one global mapping** for `/api/**` in the `configuration` package (ADR-0008: `@Configuration` classes).

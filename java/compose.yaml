@@ -11,7 +11,8 @@ services:
       POSTGRES_USER: app
       POSTGRES_PASSWORD: app  # local-only default, not a secret
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U app -d timedeposits"]
+      # Over TCP, as the app connects: during first-start init the server listens on its Unix socket only.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U app -d timedeposits"]
       interval: 2s
       timeout: 3s
       retries: 30
@@ -24,6 +25,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    # Safety net if the database is not yet reachable despite the healthcheck.
+    restart: on-failure
     environment:
       # The demo profile adds the seed data (ADR-0006); Flyway creates the schema on startup.
       SPRING_PROFILES_ACTIVE: demo
@@ -32,8 +35,9 @@ services:
       SPRING_DATASOURCE_PASSWORD: app
       # Browser origin of the Swagger UI below (app.cors.allowed-origins).
       APP_CORS_ALLOWEDORIGINS: http://localhost:8081
+    # Published on localhost only: the API has no authentication.
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
 
   swagger-ui:
     # A separate client on its own origin: the application serves no documentation (ADR-0005).
@@ -43,7 +47,7 @@ services:
     volumes:
       - ./src/main/resources/openapi/openapi.yaml:/spec/openapi.yaml:ro
     ports:
-      - "8081:8080"
+      - "127.0.0.1:8081:8080"
 
 volumes:
   postgres-data:
