@@ -71,8 +71,9 @@ public class BalanceUpdatePeriodReservations {
     }
 
     // Only a locked in-progress row is a live run (ADR-0014). Empty: a live run holds the row locked, or it was
-    // released meanwhile. Completed: its run finished after the read above. If that row is already locked again by
-    // a request that also read it in progress, this request gets 409 although the month is done (accepted, ADR-0014).
+    // released meanwhile. Completed: its run finished after the read above. If that row is already locked again (by a
+    // request that also read it in progress, or a fenced-out run on its way to the fence), this request gets 409
+    // although the month is done (accepted, ADR-0014).
     private Reservation reserveInProgress(YearMonth period, Instant token) {
         return periods.findUnlocked(period).<Reservation>map(state -> switch (state) {
             case Completed completed -> new Reservation.Replay(completed.outcome());

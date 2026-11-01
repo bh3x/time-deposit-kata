@@ -105,7 +105,7 @@ sequenceDiagram
   C->>R: POST /api/v1/balance-updates
   R->>S: applyMonthlyInterest()
   S->>V: reserve() — UTC month of now, own transaction
-  V->>P: insert month IN_PROGRESS (or find it: COMPLETED → replay, in progress → 409)
+  V->>P: insert month IN_PROGRESS (or read it: COMPLETED → replay, in progress → 409, stale → take over, ADR-0014)
   S->>M: apply(month, token)
   M->>P: lock month row, check the fence
   M->>P: LoadTimeDepositsPort.loadAllForUpdate()

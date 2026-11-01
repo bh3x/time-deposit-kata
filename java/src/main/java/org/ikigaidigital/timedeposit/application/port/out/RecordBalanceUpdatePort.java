@@ -26,7 +26,7 @@ public interface RecordBalanceUpdatePort {
 
     /**
      * Locks and returns the month's state without waiting: empty if the month does not exist or another transaction
-     * holds it locked (a live run, ADR-0012, C).
+     * holds it locked (a locked in-progress month is treated as a live run, ADR-0012 C as refined by ADR-0014).
      */
     Optional<BalanceUpdatePeriodState> findUnlocked(YearMonth period);
 

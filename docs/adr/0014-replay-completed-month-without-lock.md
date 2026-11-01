@@ -42,7 +42,8 @@ purges a month row (ADR-0013). Reading it needs no lock.
 The order keeps the insert first, as in ADR-0013, so a request of a new month still costs one statement.
 
 **Remaining window (accepted):** a request that reads `IN_PROGRESS` in step 2, and finds the row in step 3 already
-completed *and* locked by a request that read it as `IN_PROGRESS` just before, gets `409`. The run really was in
+completed *and* locked by another transaction — a request that read it as `IN_PROGRESS` just before, or a run fenced
+out by a takeover that locks the row on its way to the fence — gets `409`. The run really was in
 progress when the request looked, and the next request replays. Closing it would need a further read for a window of
 a commit's length.
 

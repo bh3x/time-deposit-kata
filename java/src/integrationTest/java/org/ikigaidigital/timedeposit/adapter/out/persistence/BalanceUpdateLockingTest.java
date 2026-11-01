@@ -6,8 +6,6 @@ import org.ikigaidigital.timedeposit.application.model.BalanceUpdateOutcome;
 import org.ikigaidigital.timedeposit.application.model.BalanceUpdatePeriodState;
 import org.ikigaidigital.timedeposit.application.model.BalanceUpdatePeriodState.Completed;
 import org.ikigaidigital.timedeposit.application.model.BalanceUpdatePeriodState.InProgress;
-import org.ikigaidigital.timedeposit.application.service.BalanceUpdatePeriodReservations;
-import org.ikigaidigital.timedeposit.application.service.BalanceUpdatePeriodReservations.Reservation;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -26,7 +24,6 @@ import javax.sql.DataSource;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.sql.Statement;
-import java.time.Clock;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.YearMonth;
@@ -39,7 +36,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * The locks ADR-0012 relies on, across two connections: a holder connection takes a lock and keeps it while the
- * adapter runs in its own transaction (scenarios P9, P15 and the two items ADR-0012 marks unverified). A missing
+ * adapter runs in its own transaction (scenarios P9, P15, P16 and the two items ADR-0012 marks unverified). A missing
  * SKIP LOCKED or an unexpected wait fails fast with lock_timeout (55P03) instead of hanging; no Thread.sleep.
  * Data is committed, so each test cleans up after itself.
  */
@@ -157,18 +154,6 @@ class BalanceUpdateLockingTest {
             }
             return null;
         });
-    }
-
-    // P16 with the real SKIP LOCKED: a completed month held locked by another transaction (e.g. a concurrent request
-    // of the month) is replayed, not reported as in progress (ADR-0014).
-    @Test
-    void aCompletedMonthLockedByAnotherTransactionIsReplayed() throws SQLException {
-        insertCompleted(NOVEMBER, OUTCOME);
-        BalanceUpdatePeriodReservations reservations =
-                new BalanceUpdatePeriodReservations(periods, Clock.fixed(NOW, ZoneOffset.UTC));
-
-        whileLockedBy(LOCK_NOVEMBER, () -> assertThat(inTransaction(reservations::reserve))
-                .isEqualTo(new Reservation.Replay(OUTCOME)));
     }
 
     // ADR-0012, unverified until then: ON CONFLICT DO NOTHING does not wait for a row that is only locked.
